@@ -1,0 +1,20 @@
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local editor state
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Generated or temporary files
+outputs/
+tmp/
+temp/
+*.tmp
+*.log
+*.zip
+
+# SVN working-copy metadata must never be committed to this Git repo.
+.svn/
