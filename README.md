@@ -2,7 +2,7 @@
 
 `svn-precommit-review` is a Codex Agent Skill for reviewing SVN/TortoiseSVN working-copy changes before commit.
 
-It inspects `svn status` and `svn diff`, checks common commit risks, drafts a Korean commit message, and asks for final human confirmation before any commit. By default it is read-only. It may run `svn commit` only when the user explicitly requests it and approves the exact target paths and message.
+It inspects `svn status` and `svn diff`, checks common commit risks, drafts a Korean commit message, and asks for final human confirmation before any commit. By default the review is read-only. If the user explicitly asks for commit preparation or auto-add, it may run narrow `svn add` only for required new files that would otherwise break build/runtime and pass the safety checks. If the user re-requests deletion for exact reviewed paths, it may run safe `svn delete` only for approved versioned files. It may run `svn commit` only when the user explicitly requests it and approves the exact target paths and message.
 
 ## Translations
 
@@ -22,8 +22,8 @@ It inspects `svn status` and `svn diff`, checks common commit risks, drafts a Ko
 - Logs, temporary files, cache files, and local config
 - `.env`, tokens, passwords, API keys, and other secret-like changes
 - Conflict markers: `<<<<<<<`, `=======`, `>>>>>>>`
-- Unversioned files that may need manual `svn add`
-- Deleted or missing files that may be accidental
+- Unversioned files that may need manual `svn add` or safe auto-add
+- Deleted or missing files that may be accidental, or exact reviewed files that may be safely scheduled for deletion after re-request
 - Remote freshness via `svn status -u` when available
 - Test/build verification gaps
 
@@ -74,6 +74,18 @@ Review and then request a guarded commit:
 
 ```text
 $svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토한 뒤, 문제가 없으면 커밋 전 최종 확인을 받고 승인된 파일만 커밋해줘.
+```
+
+Review and safely add required build files:
+
+```text
+$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토하고, 빌드가 깨질 수 있는 필수 신규 파일은 안전 기준을 통과하면 svn add까지 해줘.
+```
+
+Review first, then safely schedule exact reviewed files for deletion:
+
+```text
+$svn-precommit-review 방금 검토한 path/to/obsolete-file.cs 삭제가 의도된 것이 맞으니, 안전 기준을 통과하면 svn delete로 삭제 예약해줘.
 ```
 
 Approve exact targets after review:

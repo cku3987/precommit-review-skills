@@ -1,6 +1,6 @@
 # Guide svn-precommit-review
 
-`svn-precommit-review` est une Codex Agent Skill qui vérifie les changements SVN/TortoiseSVN avant commit et prépare un brouillon de message de commit en coréen.
+`svn-precommit-review` est une Codex Agent Skill qui vérifie les changements SVN/TortoiseSVN avant commit et prépare un brouillon de message de commit en coréen. Par défaut, la revue est en lecture seule; si l’utilisateur demande explicitement une préparation de commit ou un auto-add, elle peut exécuter `svn add` uniquement pour les nouveaux fichiers nécessaires qui pourraient casser le build/runtime et qui passent les contrôles de sécurité. Après la revue, `svn delete` n’est autorisé que pour des chemins versionnés exacts dont la suppression est redemandée explicitement et qui passent les contrôles de sécurité.
 
 ## Installation
 
@@ -30,12 +30,20 @@ Pour une working copy précise:
 $svn-precommit-review Vérifie svn status et svn diff dans <SVN_WORKING_COPY> et donne une recommandation de commit.
 ```
 
+Safe add des fichiers nécessaires:
+
+```text
+$svn-precommit-review Vérifie les changements dans <SVN_WORKING_COPY> et ajoute avec svn add uniquement les nouveaux fichiers nécessaires s'ils peuvent casser le build et passent les contrôles de sécurité.
+```
+
 ## Contrôles effectués
 
 - `svn status`, `svn status -u`, `svn diff --summarize`, `svn diff`
 - artefacts de build, fichiers IDE, logs, fichiers temporaires, configuration locale
 - risques liés à `.env`, tokens, mots de passe, API keys et autres secrets
 - marqueurs de conflit et fichiers missing/deleted
+- `svn add` sécurisé pour les fichiers nécessaires au build uniquement sur demande explicite
+- `svn delete` sécurisé uniquement pour les chemins exacts revus après nouvelle demande explicite
 - commit CLI protégé uniquement après demande explicite et validation finale
 
 ## Encodage des messages coréens

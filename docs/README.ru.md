@@ -1,6 +1,6 @@
 # Руководство svn-precommit-review
 
-`svn-precommit-review` — это Codex Agent Skill для проверки изменений SVN/TortoiseSVN перед коммитом и подготовки черновика сообщения коммита на корейском языке.
+`svn-precommit-review` — это Codex Agent Skill для проверки изменений SVN/TortoiseSVN перед коммитом и подготовки черновика сообщения коммита на корейском языке. По умолчанию проверка только читает данные; если пользователь явно просит подготовить коммит или auto-add, навык может выполнить `svn add` только для обязательных новых файлов, без которых сборка или запуск могут сломаться, и только после проверок безопасности. После проверки `svn delete` разрешен только для точных versioned-путей, которые пользователь повторно запросил удалить и которые прошли проверки безопасности.
 
 ## Установка
 
@@ -30,12 +30,20 @@ $svn-precommit-review Проверь текущие изменения SVN пе�
 $svn-precommit-review Проверь svn status и svn diff в <SVN_WORKING_COPY> и дай рекомендацию по коммиту.
 ```
 
+Safe add для обязательных новых файлов:
+
+```text
+$svn-precommit-review Проверь изменения в <SVN_WORKING_COPY> и добавь через svn add только обязательные новые файлы, если без них может сломаться сборка и они проходят проверки безопасности.
+```
+
 ## Что проверяется
 
 - `svn status`, `svn status -u`, `svn diff --summarize`, `svn diff`
 - build outputs, IDE files, logs, temporary files, local settings
 - `.env`, tokens, passwords, API keys, and other sensitive data risks
 - conflict markers and missing/deleted files
+- safe `svn add` for required build files only after explicit user request
+- safe `svn delete` only for exact reviewed paths after explicit re-request
 - guarded CLI commit only after explicit user request and final approval
 
 ## Korean Commit Message Encoding

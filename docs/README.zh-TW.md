@@ -1,6 +1,6 @@
 # svn-precommit-review 指南
 
-`svn-precommit-review` 是一個 Codex Agent Skill，用於在 SVN/TortoiseSVN 提交前檢查 working copy 變更，並產生韓文提交訊息草稿。
+`svn-precommit-review` 是一個 Codex Agent Skill，用於在 SVN/TortoiseSVN 提交前檢查 working copy 變更，並產生韓文提交訊息草稿。預設檢查為唯讀；只有在使用者明確要求提交準備或自動 add 時，才會依安全條件對可能導致 build/runtime 失敗的必要新檔案執行 `svn add`。檢查後只有在使用者再次明確要求刪除具體路徑時，才會依安全條件對已版本控制檔案執行 `svn delete`。
 
 ## 安裝
 
@@ -30,12 +30,20 @@ $svn-precommit-review 請在提交前檢查目前 SVN 變更，並產生韓文�
 $svn-precommit-review 請檢查 <SVN_WORKING_COPY> 路徑下的 svn status 與 svn diff，並提供提交建議。
 ```
 
+安全 add 必要新檔案:
+
+```text
+$svn-precommit-review 請檢查 <SVN_WORKING_COPY> 的變更；若必要新檔案會影響 build，且通過安全條件，請執行 svn add。
+```
+
 ## 重點
 
 - 檢查 `svn status`, `svn status -u`, `svn diff --summarize`, `svn diff`
 - 偵測建置輸出、IDE 檔案、log、暫存檔、本機設定
 - 偵測 `.env`, token, password, API Key 等敏感資訊風險
 - 檢查衝突標記與 missing/deleted 檔案
+- 只有在明確要求時，才對通過安全條件的 build 必要新檔案執行 `svn add`
+- 只對檢查後再次明確要求的具體路徑執行安全 `svn delete`
 - 只有在使用者明確要求並最終確認後，才允許受保護的 CLI commit
 
 ## 韓文提交訊息編碼

@@ -1,6 +1,6 @@
 # svn-precommit-review ガイド
 
-`svn-precommit-review` は、SVN/TortoiseSVN のコミット直前に working copy の変更を確認し、韓国語のコミットメッセージ案を作成する Codex Agent Skill です。
+`svn-precommit-review` は、SVN/TortoiseSVN のコミット直前に working copy の変更を確認し、韓国語のコミットメッセージ案を作成する Codex Agent Skill です。通常のレビューは読み取り専用ですが、ユーザーがコミット準備または auto-add を明示した場合のみ、ビルドを壊す可能性がある必須の新規ファイルを安全条件に従って `svn add` できます。レビュー後にユーザーが明示パスの削除を再依頼した場合のみ、安全条件を満たす versioned ファイルを `svn delete` で削除予定にできます。
 
 ## インストール
 
@@ -30,6 +30,12 @@ $svn-precommit-review 現在の SVN 変更内容をコミット前にレビュ�
 $svn-precommit-review <SVN_WORKING_COPY> の svn status と svn diff を確認して、コミット可否と推奨コミットメッセージを作成して。
 ```
 
+必須ファイルの safe add:
+
+```text
+$svn-precommit-review <SVN_WORKING_COPY> の変更を確認し、ビルドに必要な新規ファイルは安全条件を満たす場合だけ svn add して。
+```
+
 ## 主な確認項目
 
 - `svn status`, `svn status -u`, `svn diff --summarize`, `svn diff`
@@ -37,6 +43,8 @@ $svn-precommit-review <SVN_WORKING_COPY> の svn status と svn diff を確認�
 - `.env`, トークン, パスワード, API Key などの機密情報の可能性
 - コンフリクトマーカーと missing/deleted ファイル
 - コミット可否: `가능`, `조건부 가능`, `보류 권장`
+- 明示的な依頼がある場合のみ、ビルドに必要な新規ファイルを安全条件付きで `svn add`
+- レビュー後に再依頼された明示パスのみ、安全条件付きで `svn delete`
 - 明示的な依頼と最終承認がある場合のみ、ガード付き CLI コミット
 
 ## 韓国語コミットメッセージのエンコーディング
