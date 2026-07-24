@@ -38,14 +38,20 @@ $svn-precommit-review 请检查 <SVN_WORKING_COPY> 的变更；如果必要新�
 
 ## 检查内容
 
-- `svn status`, `svn status -u`, `svn diff --summarize`, `svn diff`
+- 结构化检查 `svn status --xml`、`svn status -u --xml`、内容 diff 和 property diff
 - 构建产物、IDE 文件、日志、临时文件、本地配置
-- `.env`, token, password, API Key 等敏感信息风险
-- 冲突标记以及 missing/deleted 文件
+- 检查 `.env`、token、password、API Key 等敏感信息，实际值始终以 `[REDACTED]` 屏蔽
+- 检查 text/property/tree conflict，以及 replaced、obstructed、switched、external、nested working copy 和 lock 状态
 - 提交可行性判断: `가능`, `조건부 가능`, `보류 권장`
 - 仅在明确请求时，对通过安全条件的构建必要新文件执行 `svn add`
-- 仅对检查后再次明确请求的具体路径执行安全 `svn delete`
-- 只有在用户明确请求并最终确认后，才允许受保护的 CLI 提交
+- 仅对检查后再次明确请求且没有本地修改的具体本地路径执行 `svn delete`；不自动删除本地已修改文件或仓库 URL
+- 在批准前和提交前比较 status、diff、property、目标和文件内容的 SHA-256 snapshot
+- 默认按文件提交；只有检查全部后代和 SVN 边界后才允许目录目标
+- 空输出分类简洁写为 `- 없음`
+- 在 TortoiseSVN 手动提交模式下，Codex 不会执行 `svn commit`，也不会询问 CLI 执行授权
+- 只有在用户事先明确要求 Codex 执行 CLI 提交、检查目标和消息后，对直接执行问题作出明确肯定答复，才会执行受保护的 CLI 提交
+
+只有当 CLI 模式已被明确请求且 Codex 刚刚提出直接执行问题时，`是`、`yes`、`继续` 等简短明确的肯定答复才会授权 CLI 提交。仅检查请求会在不提出该问题的情况下结束。
 
 ## 韩语提交信息编码
 
@@ -55,17 +61,19 @@ $svn-precommit-review 请检查 <SVN_WORKING_COPY> 的变更；如果必要新�
 svn commit -m "한글 커밋 메시지"
 ```
 
-如果必须使用 CLI 提交，请使用 UTF-8 消息文件并显式指定 `--encoding UTF-8`。
+如果必须使用 CLI 提交，请使用无 BOM、LF 换行的 UTF-8 消息文件并显式指定 `--encoding UTF-8`。
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-提交后用 XML 输出验证仓库中保存的日志信息。
+从提交结果读取修订号，并且只验证该修订。
 
 ```powershell
-svn log --xml --limit 1
+svn log --xml -r <revision-number> <repository-root-url>
 ```
+
+将 XML `<msg>` 与原始消息精确比较。由于可能存在并发提交，不使用 `--limit 1` 作为验证依据。
 
 ## 更多信息
 

@@ -38,13 +38,19 @@ $svn-precommit-review Vérifie les changements dans <SVN_WORKING_COPY> et ajoute
 
 ## Contrôles effectués
 
-- `svn status`, `svn status -u`, `svn diff --summarize`, `svn diff`
+- revue structurée avec `svn status --xml`, `svn status -u --xml`, diff de contenu et de propriétés
 - artefacts de build, fichiers IDE, logs, fichiers temporaires, configuration locale
-- risques liés à `.env`, tokens, mots de passe, API keys et autres secrets
-- marqueurs de conflit et fichiers missing/deleted
+- risques liés à `.env`, tokens, mots de passe, API keys et autres secrets; les valeurs sont toujours masquées par `[REDACTED]`
+- conflits de texte, propriétés et arbre, ainsi que les états replaced, obstructed, switched, external, nested working copy et lock
 - `svn add` sécurisé pour les fichiers nécessaires au build uniquement sur demande explicite
-- `svn delete` sécurisé uniquement pour les chemins exacts revus après nouvelle demande explicite
-- commit CLI protégé uniquement après demande explicite et validation finale
+- `svn delete` sécurisé uniquement pour les chemins locaux exacts et non modifiés; jamais pour un fichier modifié localement ni une URL du dépôt
+- snapshot SHA-256 de l’état, des diffs, des propriétés, des cibles et du contenu des fichiers avant validation puis juste avant commit
+- commits par fichier par défaut; une cible répertoire exige la revue de tous les descendants et frontières SVN
+- les catégories vides sont indiquées brièvement par `- 없음`
+- en mode de commit manuel TortoiseSVN, Codex n’exécute pas `svn commit` et ne demande pas d’autorisation d’exécution CLI
+- le commit CLI par Codex est exécuté uniquement après une demande explicite et une réponse affirmative claire à la question directe d’exécution, après vérification des cibles et du message
+
+Les réponses brèves et claires comme `oui`, `yes` ou `continue` autorisent le commit CLI uniquement si le mode CLI a déjà été demandé explicitement et si Codex vient de poser la question directe d’exécution. Une simple demande de revue se termine sans cette question.
 
 ## Encodage des messages coréens
 
@@ -54,17 +60,19 @@ $svn-precommit-review Vérifie les changements dans <SVN_WORKING_COPY> et ajoute
 svn commit -m "한글 커밋 메시지"
 ```
 
-Pour un commit CLI, utilisez un fichier UTF-8 et `--encoding UTF-8`:
+Pour un commit CLI, utilisez un fichier UTF-8 sans BOM avec fins de ligne LF et `--encoding UTF-8`:
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-Vérifiez le log enregistré avec:
+Lisez la révision dans le résultat du commit et vérifiez précisément cette révision:
 
 ```powershell
-svn log --xml --limit 1
+svn log --xml -r <revision-number> <repository-root-url>
 ```
+
+Comparez exactement le `<msg>` XML au message original. `--limit 1` n’est pas une preuve valable en présence de commits simultanés.
 
 ## Détails
 

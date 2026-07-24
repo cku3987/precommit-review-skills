@@ -38,13 +38,19 @@ $svn-precommit-review Проверь изменения в <SVN_WORKING_COPY> и
 
 ## Что проверяется
 
-- `svn status`, `svn status -u`, `svn diff --summarize`, `svn diff`
+- структурная проверка через `svn status --xml`, `svn status -u --xml`, diff содержимого и свойств
 - build outputs, IDE files, logs, temporary files, local settings
-- `.env`, tokens, passwords, API keys, and other sensitive data risks
-- conflict markers and missing/deleted files
+- риски `.env`, токенов, паролей, API-ключей и других секретов; значения всегда маскируются как `[REDACTED]`
+- конфликты текста, свойств и дерева, а также состояния replaced, obstructed, switched, external, nested working copy и lock
 - safe `svn add` for required build files only after explicit user request
-- safe `svn delete` only for exact reviewed paths after explicit re-request
-- guarded CLI commit only after explicit user request and final approval
+- безопасный `svn delete` только для точных неизмененных локальных путей; не для локально измененных файлов или URL репозитория
+- SHA-256 snapshot статуса, diff, свойств, целей и содержимого файлов перед подтверждением и непосредственно перед коммитом
+- по умолчанию коммит отдельных файлов; каталог разрешен только после проверки всех потомков и границ SVN
+- пустые категории вывода кратко обозначаются как `- 없음`
+- в ручном режиме TortoiseSVN Codex не выполняет `svn commit` и не запрашивает разрешение на запуск CLI
+- CLI-коммит Codex выполняется только после явного запроса и четкого утвердительного ответа на прямой вопрос о выполнении после проверки целей и сообщения
+
+Короткие четкие ответы вроде `да`, `yes` или `продолжай` разрешают CLI-коммит только тогда, когда режим CLI уже был явно запрошен и Codex только что задал прямой вопрос о выполнении. Запрос только на проверку завершается без такого вопроса.
 
 ## Korean Commit Message Encoding
 
@@ -54,17 +60,19 @@ Avoid this in PowerShell:
 svn commit -m "한글 커밋 메시지"
 ```
 
-Use a UTF-8 message file and `--encoding UTF-8` for CLI commits:
+Для CLI-коммита используйте UTF-8 без BOM, переводы строк LF и `--encoding UTF-8`:
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-Verify the stored log with:
+Получите номер ревизии из результата коммита и проверьте именно эту ревизию:
 
 ```powershell
-svn log --xml --limit 1
+svn log --xml -r <revision-number> <repository-root-url>
 ```
+
+Сравните XML `<msg>` с исходным сообщением точно. `--limit 1` не является надежной проверкой при параллельных коммитах.
 
 ## Details
 

@@ -6,14 +6,18 @@
 
 The skill is designed to:
 
-- inspect current working-copy changes with `svn status` and `svn diff`
+- inspect current working-copy changes with structured `svn status --xml`, remote status, content diffs, and property diffs
 - classify commit readiness as `가능`, `조건부 가능`, or `보류 권장`
 - detect build outputs, IDE/user-specific files, logs, temporary files, local settings, sensitive information, conflict markers, and suspicious missing files
 - safely `svn add` required new files that would otherwise break build/runtime when the user explicitly asks for commit preparation or auto-add
-- safely `svn delete` exact reviewed versioned files only when the user re-requests deletion or explicitly includes those delete targets in commit preparation
+- safely `svn delete` exact reviewed clean versioned local paths only when the user re-requests deletion or explicitly includes those delete targets in commit preparation
 - draft a Korean commit message
-- ask for final human confirmation of included targets, excluded targets, remaining risks, and the exact commit message
-- run a guarded CLI commit only when the user explicitly requests it and approves the exact targets and message
+- give a mode-specific final instruction or CLI execution question after showing included targets, excluded targets, remaining risks, and the exact commit message
+- keep manual TortoiseSVN commit mode separate from Codex CLI commit mode
+- run a guarded CLI commit only when the user explicitly requests Codex to commit and then clearly agrees to the direct execution question after reviewing the targets and message
+- fingerprint the approved status, diffs, properties, target list, and file bytes, then stop if the pre-commit snapshot differs
+- verify the exact committed revision and compare its XML `<msg>` with the original Korean message
+- redact secret values from all reports
 
 The default behavior is read-only review. The skill does not run broad `svn add`, broad `svn delete`, `svn update`, `svn revert`, or `svn resolve`. If the user explicitly asks for commit preparation, auto-add, or commit, the skill may run `svn add` only for required new files that pass the safe-add criteria. If the user re-requests deletion after review, the skill may run `svn delete` only for exact approved versioned paths that pass the safe-delete criteria.
 
@@ -75,10 +79,11 @@ $svn-precommit-review 방금 검토한 path/to/obsolete-file.cs 삭제가 의도
 The skill checks:
 
 - `svn info`
-- `svn status`
-- `svn status -u`
+- `svn status --xml`
+- `svn status -u --xml`
 - `svn diff --summarize`
 - `svn diff`
+- `svn diff --properties-only`
 - conflict markers and likely sensitive information when relevant
 
 If `svn status -u` fails because of network or authentication problems, the skill should continue and report remote freshness as not verified.
@@ -105,18 +110,19 @@ Safe delete mode is enabled only after review when the user explicitly re-reques
 The skill may run `svn delete <path>` only when all of these are true:
 
 - the path is versioned and inside the intended SVN working copy
+- the path is a local working-copy path, not a repository URL
 - the path is not under `.svn`
-- the path is not conflicted, out-of-date, or remotely changed
+- the path is not conflicted, out-of-date, remotely changed, switched, external, obstructed, or affected by a lock anomaly
+- the path has no local text or property modifications
 - the deletion intent is clear and the likely build/runtime impact has been reported
 - the command targets explicit file paths; broad `svn delete .`, `svn delete *`, and uninspected directory deletes are forbidden
-- if the file has local modifications, the user explicitly approved scheduling that modified file for deletion
 - if the file is already missing (`!`), `svn delete --force` is allowed only for that exact approved missing path
 
 If the file is ambiguous, the skill must not delete it. It should report the file as `삭제 예약 보류, 수동 확인 필요`.
 
 ## 7. Output Format
 
-The final review output is intentionally Korean-first because the target workflow is Korean SVN/TortoiseSVN commit review.
+The final review output is intentionally Korean-first because the target workflow is Korean SVN/TortoiseSVN commit review. Empty file-state categories use `- 없음`, and risk-free reviews use `특별한 위험 요소는 보이지 않습니다.` instead of padded bullets.
 
 ```markdown
 # SVN 커밋 전 검토 결과
@@ -167,35 +173,46 @@ If the user explicitly asks the skill to commit and approves the exact targets a
 `보류 권장`:
 
 - conflicts, likely secrets, accidental generated files, suspicious missing files, or out-of-date risk are present
+- an obstruction, broken lock, unsafe directory scope, or post-approval snapshot mismatch is present
 - the change intent cannot be understood with enough confidence
 - committing may break build, runtime, or operations
 
 ## 9. Guarded Commit Mode
 
-The skill does not commit automatically after review.
+The skill does not commit automatically after review. TortoiseSVN manual commit mode is the default, never authorizes Codex to run `svn commit`, and ends without a CLI execution question.
 
-To commit, the user must explicitly ask for it and approve:
+For Codex CLI commit mode, the user must explicitly ask Codex to execute the commit and review:
 
 - included target paths
 - excluded paths or file groups
 - remaining risks
 - exact commit message
 
-Example review request:
+Example TortoiseSVN manual review request:
 
 ```text
 $svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토해줘.
 ```
 
-Example approval after review:
+After this review, Codex stops and the user commits manually in TortoiseSVN.
+
+Example initial Codex CLI commit request:
 
 ```text
-포함 대상은 path/to/changed-file.cs만입니다.
-제외 대상은 build outputs, IDE files, logs, temp files입니다.
-추천 커밋 메시지를 사용해서 커밋해줘.
+$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토한 뒤, 최종 승인을 받으면 승인된 파일만 CLI로 커밋해줘.
 ```
 
-Immediately before commit, the skill must run `svn status` again. If new unapproved changes, conflicts, likely secrets, or unapproved/unclear missing/deleted files appear, it must refuse to commit. Files added by safe add mode and files scheduled by safe delete mode still require human diff review before commit.
+After Codex shows the exact targets and message, it asks:
+
+```text
+위 대상과 커밋 메시지로 Codex가 지금 CLI 커밋을 실행해도 될까요?
+```
+
+A clear affirmative reply such as `예`, `네`, `응`, `진행해`, or `커밋해줘` then authorizes execution. These replies have no CLI authorization effect unless the user already requested Codex CLI commit mode and Codex has asked this direct execution question.
+
+Before asking the execution question, the skill records an in-memory SHA-256 approval snapshot containing the ordered target list, full XML status, target content/property diffs, and hashes of all approved existing files. Immediately before commit it reruns the same inputs. Any changed fingerprint, file hash, property state, target list, new unapproved local change, conflict, or approved-scope remote change invalidates approval and requires a new review. The temporary message file is not created until this comparison passes.
+
+Commits prefer explicit file targets. A directory target is allowed only when recursive XML status proves that every changed descendant exactly matches the approved set and no external, nested working copy, switched path, conflict, obstruction, or unapproved change is present.
 
 ## 10. Korean Commit Message Encoding
 
@@ -205,7 +222,7 @@ Avoid this in PowerShell:
 svn commit -m "한글 커밋 메시지"
 ```
 
-For CLI commits, use a UTF-8 message file and explicitly pass `--encoding UTF-8`:
+For CLI commits, write the exact message to a BOM-free UTF-8 file with LF line endings and no unintended trailing newline, then explicitly pass `--encoding UTF-8`:
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
@@ -213,19 +230,20 @@ svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 
 Using `--file` without `--encoding UTF-8` may still store a broken Korean `svn:log` value in some environments.
 
-After commit, verify the stored log message with XML output:
+After commit, parse revision `N` from that commit command's successful output. Obtain the repository root URL and verify only revision `N`:
 
 ```powershell
-svn log --xml --limit 1
+svn log --xml -r N <repository-root-url>
 ```
 
-Plain `svn log` can look correct because of console encoding even when the repository `svn:log` value is broken.
+Parse XML, confirm the `<logentry>` revision is `N`, and compare `<msg>` character-for-character with the original message. Never use `--limit 1` as proof because a concurrent commit may become the latest revision. If revision parsing fails, report verification failure and do not retry the commit.
 
 ## 11. Temporary Message File Cleanup
 
 When a UTF-8 commit message file is used:
 
 - create it outside the SVN working copy when possible
+- use UTF-8 without BOM and avoid shell defaults that may change encoding
 - delete it whether the commit succeeds or fails
 - confirm it does not remain as an unversioned `?` file in `svn status`
 - never accidentally `svn add` a temporary message file
@@ -282,12 +300,10 @@ Schedule exact reviewed deletion:
 $svn-precommit-review 방금 검토한 path/to/obsolete-file.cs 삭제가 의도된 것이 맞으니, 안전 기준을 통과하면 svn delete로 삭제 예약해줘.
 ```
 
-Approve exact targets after review:
+Approve after Codex has shown the exact targets and message and asked the direct CLI execution question:
 
 ```text
-포함 대상은 path/to/changed-file.cs만입니다.
-제외 대상은 build outputs, IDE files, logs, temp files입니다.
-추천 커밋 메시지로 커밋을 진행해줘.
+응, 진행해.
 ```
 
 ## 14. Safety Notes
@@ -295,11 +311,19 @@ Approve exact targets after review:
 - The skill does not run broad `svn add`.
 - Safe `svn add` is allowed only when the user explicitly asks for commit preparation, auto-add, or commit.
 - The skill does not run broad `svn delete`.
-- Safe `svn delete` is allowed only after review and explicit re-request for exact versioned paths.
+- Safe `svn delete` is allowed only after review and explicit re-request for exact clean versioned local paths.
+- The skill never auto-deletes locally modified files and never passes a URL or `--keep-local` to `svn delete`.
 - Ambiguous unversioned files must be manually selected by a human.
 - Missing or deleted files must be confirmed as intentional before deletion scheduling or commit.
 - Do not commit if conflicts are present.
 - Do not commit if likely sensitive information is present.
+- Never print a sensitive value; report only its path, optional line number, risk type, and `[REDACTED]`.
 - Commit only explicitly approved target paths.
-- Avoid broad working-copy commits.
-- For Korean CLI commit messages, use `--file <message-file> --encoding UTF-8`.
+- Avoid broad working-copy commits and strictly validate every descendant before any directory target.
+- Parse XML status for text/property/tree conflicts, replacement, obstruction, switch, external, nested working copy, and lock anomalies.
+- Count only `/status/target/entry` nodes as status changes; an empty `<target>` node is not a change.
+- Inspect property changes such as `svn:externals`, `svn:ignore`, and `svn:eol-style`.
+- Invalidate approval when the pre-commit status/diff/file fingerprint differs.
+- Keep TortoiseSVN manual mode and Codex CLI mode separate.
+- Accept a clear affirmative reply as CLI commit approval only when CLI commit mode was explicitly requested and Codex has just asked the direct execution question.
+- For Korean CLI commit messages, use a BOM-free UTF-8 file with `--encoding UTF-8`, then verify the exact committed revision rather than the latest log entry.
