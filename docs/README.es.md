@@ -1,79 +1,58 @@
 # Guía de svn-precommit-review
 
-`svn-precommit-review` es una Codex Agent Skill para revisar cambios de SVN/TortoiseSVN antes de confirmar y preparar un borrador de mensaje de commit en coreano. Por defecto la revisión es de solo lectura; si el usuario pide explícitamente preparar el commit o auto-add, puede ejecutar `svn add` solo para archivos nuevos necesarios que podrían romper build/runtime y que pasen los criterios de seguridad. Después de la revisión, `svn delete` solo se permite para rutas versionadas exactas cuya eliminación el usuario vuelve a solicitar y que pasan los criterios de seguridad.
+`svn-precommit-review` es una habilidad de Codex Agent para revisar una copia de trabajo SVN/TortoiseSVN antes del commit y crear un mensaje de commit en coreano. Por defecto funciona en modo de solo lectura. Cuando el usuario solicita explícitamente un commit mediante Codex CLI, puede hacer add de los nuevos archivos fuente necesarios y, tras una única confirmación final, confirmar solo el alcance aprobado.
 
 ## Instalación
-
-A nivel de usuario:
 
 ```text
 %USERPROFILE%\.codex\skills\svn-precommit-review\SKILL.md
 ```
 
-A nivel de proyecto:
+o:
 
 ```text
 <project-root>\.agents\skills\svn-precommit-review\SKILL.md
 ```
 
-Copia `svn-precommit-review/SKILL.md` desde este repositorio a la ubicación deseada.
+Copie `svn-precommit-review/SKILL.md` de este repositorio a la ubicación elegida.
 
 ## Uso
 
-```text
-$svn-precommit-review Revisa los cambios SVN actuales antes del commit y prepara un mensaje de commit en coreano.
-```
-
-Para una working copy específica:
+Revisión de solo lectura:
 
 ```text
-$svn-precommit-review Revisa svn status y svn diff en <SVN_WORKING_COPY> y recomienda si se puede hacer commit.
+$svn-precommit-review Revisa los cambios actuales de SVN antes del commit y crea un mensaje de commit en coreano.
 ```
 
-Safe add de archivos necesarios:
+Solicitar un commit por CLI:
 
 ```text
-$svn-precommit-review Revisa los cambios en <SVN_WORKING_COPY> y agrega con svn add solo los archivos nuevos necesarios si podrían romper el build y pasan los criterios de seguridad.
+$svn-precommit-review Revisa los cambios de <SVN_WORKING_COPY>, haz add de los nuevos archivos fuente necesarios y, tras la confirmación final, confirma por CLI solo el alcance aprobado.
 ```
 
-## Qué revisa
+Después de mostrar el alcance y el mensaje, responda una vez de forma clara.
 
-- revisión estructurada con `svn status --xml`, `svn status -u --xml`, diffs de contenido y propiedades
-- artefactos de build, archivos de IDE, logs, temporales y configuración local
-- riesgos de `.env`, tokens, contraseñas, API keys y otros secretos; los valores siempre se ocultan como `[REDACTED]`
-- conflictos de texto, propiedades y árbol, además de estados replaced, obstructed, switched, external, nested working copy y lock
-- `svn add` seguro para archivos necesarios de build solo con solicitud explícita
-- `svn delete` seguro solo para rutas locales exactas y sin cambios; nunca para archivos modificados localmente ni URLs del repositorio
-- snapshot SHA-256 de estado, diffs, propiedades, objetivos y contenido de archivos antes de aprobar y justo antes del commit
-- commits por archivo de forma predeterminada; los directorios requieren revisar todos los descendientes y límites SVN
-- las categorías vacías se muestran brevemente como `- 없음`
-- en el modo manual de TortoiseSVN, Codex no ejecuta `svn commit` ni solicita aprobación para ejecutar la CLI
-- el commit CLI de Codex solo se ejecuta después de una solicitud explícita y de una respuesta afirmativa clara a la pregunta directa de ejecución tras revisar los objetivos y el mensaje
-
-Respuestas breves y claras como `sí`, `yes` o `continúa` autorizan el commit CLI solo si el modo CLI ya se solicitó explícitamente y Codex acaba de hacer la pregunta directa de ejecución. Una solicitud de solo revisión termina sin esa pregunta.
-
-## Codificación de mensajes coreanos
-
-Evita esto en PowerShell:
-
-```powershell
-svn commit -m "한글 커밋 메시지"
+```text
+네, 진행해
 ```
 
-Para commits por CLI usa un archivo UTF-8 sin BOM, con saltos LF, y `--encoding UTF-8`:
+## Comportamiento
+
+- Revisa `svn status --xml`, estado remoto, diff de contenido y diff de properties.
+- Revisa archivos generados, archivos de IDE/usuario, registros, configuración local, datos sensibles, conflictos, archivos ausentes y falta de pruebas.
+- Ante una solicitud de commit por CLI, puede ejecutar `svn add` para archivos fuente, proyectos, recursos y configuración necesaria cuya intención sea clara.
+- No agrega `bin`, `obj`, registros, caché, archivos comprimidos, `.env`, archivos con posibles secretos, generados o ambiguos.
+- Cuando se solicita incluir candidatos de eliminación revisados, solo programa la eliminación de rutas locales versioned limpias.
+- No elimina rutas modificadas localmente, en conflicto, switched, external, locked o ambiguas.
+- Antes del commit vuelve a revisar el estado y los diffs objetivo; solo se detiene y revisa de nuevo si cambió el alcance aprobado, el contenido significativo o un estado SVN bloqueante.
+- No usa `svn add`, `svn delete` ni `svn commit` de alcance amplio.
+
+## Mensajes de commit en coreano
+
+Para commits por CLI usa un archivo temporal UTF-8 sin BOM y `--encoding UTF-8`:
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-Obtén la revisión del resultado del commit y verifica exactamente esa revisión:
-
-```powershell
-svn log --xml -r <revision-number> <repository-root-url>
-```
-
-Compara el `<msg>` XML exactamente con el mensaje original. `--limit 1` no es una prueba válida cuando puede haber commits simultáneos.
-
-## Detalles
-
-Guía principal en inglés: [`svn-precommit-review-guide.md`](svn-precommit-review-guide.md)
+El archivo temporal se elimina después de cada intento. Cuando el acceso al repositorio lo permite, compara el mensaje XML de la revisión realmente creada. Si el coreano almacenado está dañado, informa un fallo de verificación de codificación y no reintenta el commit ni modifica revision properties.

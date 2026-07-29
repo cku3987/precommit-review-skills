@@ -1,16 +1,14 @@
 # svn-precommit-review Anleitung
 
-`svn-precommit-review` ist eine Codex Agent Skill zum Prüfen von SVN/TortoiseSVN-Änderungen vor dem Commit und zum Erstellen eines koreanischen Commit-Message-Entwurfs. Standardmäßig ist die Prüfung read-only; wenn der Benutzer Commit-Vorbereitung oder auto-add ausdrücklich anfordert, darf der Skill `svn add` nur für notwendige neue Dateien ausführen, die sonst Build/Runtime brechen könnten und die Sicherheitskriterien erfüllen. Nach der Prüfung ist `svn delete` nur für exakte versionierte Pfade erlaubt, deren Löschung erneut ausdrücklich angefordert wurde und die die Sicherheitskriterien erfüllen.
+`svn-precommit-review` ist ein Codex-Agent-Skill zum Prüfen einer SVN/TortoiseSVN-Arbeitskopie vor dem Commit und zum Erstellen einer koreanischen Commit-Nachricht. Standardmäßig arbeitet er schreibgeschützt. Bei einer ausdrücklichen Anfrage für einen Codex-CLI-Commit kann er erforderliche neue Quelldateien sicher adden und nach einer einzigen finalen Bestätigung nur den genehmigten Umfang committen.
 
 ## Installation
-
-Benutzerweit:
 
 ```text
 %USERPROFILE%\.codex\skills\svn-precommit-review\SKILL.md
 ```
 
-Projektlokal:
+oder:
 
 ```text
 <project-root>\.agents\skills\svn-precommit-review\SKILL.md
@@ -20,60 +18,41 @@ Kopieren Sie `svn-precommit-review/SKILL.md` aus diesem Repository an den gewün
 
 ## Verwendung
 
-```text
-$svn-precommit-review Prüfe die aktuellen SVN-Änderungen vor dem Commit und erstelle eine koreanische Commit Message.
-```
-
-Für eine bestimmte Working Copy:
+Schreibgeschützte Prüfung:
 
 ```text
-$svn-precommit-review Prüfe svn status und svn diff in <SVN_WORKING_COPY> und gib eine Commit-Empfehlung.
+$svn-precommit-review Prüfe die aktuellen SVN-Änderungen vor dem Commit und erstelle eine koreanische Commit-Nachricht.
 ```
 
-Safe add notwendiger neuer Dateien:
+CLI-Commit anfordern:
 
 ```text
-$svn-precommit-review Prüfe die Änderungen in <SVN_WORKING_COPY> und führe svn add nur für notwendige neue Dateien aus, wenn sie den Build brechen könnten und die Sicherheitskriterien erfüllen.
+$svn-precommit-review Prüfe die Änderungen in <SVN_WORKING_COPY>, add die erforderlichen neuen Quelldateien und committe nach der finalen Bestätigung per CLI nur den genehmigten Umfang.
 ```
 
-## Prüfungen
+Nach Anzeige von Umfang und Nachricht genügt eine eindeutige Antwort.
 
-- strukturierte Prüfung mit `svn status --xml`, `svn status -u --xml`, Inhalts- und Property-Diffs
-- Build-Artefakte, IDE-Dateien, Logs, temporäre Dateien, lokale Einstellungen
-- Risiken durch `.env`, Tokens, Passwörter, API Keys und andere Secrets; Werte werden immer als `[REDACTED]` maskiert
-- Text-, Property- und Tree-Konflikte sowie replaced, obstructed, switched, external, nested working copy und Lock-Zustände
-- sicheres `svn add` für notwendige Build-Dateien nur nach ausdrücklicher Anfrage
-- sicheres `svn delete` nur für exakt geprüfte, unveränderte lokale Pfade; keine lokal geänderten Dateien oder Repository-URLs
-- SHA-256-Snapshot von Status, Diffs, Properties, Zielpfaden und Dateiinhalten vor Freigabe und erneut direkt vor dem Commit
-- standardmäßig dateibasierte Commits; Verzeichnisziele nur nach vollständiger Prüfung aller Nachkommen und SVN-Grenzen
-- leere Ausgabekategorien werden kurz mit `- 없음` angegeben
-- im manuellen TortoiseSVN-Modus führt Codex kein `svn commit` aus und fragt nicht nach einer CLI-Ausführungsfreigabe
-- ein CLI-Commit durch Codex wird nur nach ausdrücklicher Anfrage und einer eindeutigen Zustimmung auf die direkte Ausführungsfrage nach Prüfung von Zielen und Nachricht ausgeführt
-
-Kurze eindeutige Antworten wie `ja`, `yes` oder `weiter` autorisieren den CLI-Commit nur, wenn der CLI-Modus bereits ausdrücklich angefordert wurde und Codex gerade die direkte Ausführungsfrage gestellt hat. Eine reine Prüfung endet ohne diese Frage.
-
-## Encoding koreanischer Commit Messages
-
-Vermeiden Sie dies in PowerShell:
-
-```powershell
-svn commit -m "한글 커밋 메시지"
+```text
+네, 진행해
 ```
 
-Für CLI-Commits verwenden Sie eine UTF-8-Datei ohne BOM mit LF-Zeilenenden und `--encoding UTF-8`:
+## Verhalten
+
+- Prüft `svn status --xml`, den Remote-Status, Inhaltsdifferenzen und Property-Differenzen.
+- Prüft generierte Dateien, IDE-/Benutzerdateien, Logs, lokale Konfiguration, sensible Daten, Konflikte, fehlende Dateien und fehlende Tests.
+- Bei einer CLI-Commit-Anfrage kann `svn add` für eindeutig erforderliche neue Quellen, Projektdateien, Ressourcen und Konfiguration ausgeführt werden.
+- `bin`, `obj`, Logs, Caches, Archive, `.env`, Dateien mit möglichen Geheimnissen, generierte und mehrdeutige Dateien werden nicht hinzugefügt.
+- Wenn der Benutzer geprüfte Löschkandidaten einschließen möchte, werden nur saubere versioned lokale Pfade zur Löschung vorgemerkt.
+- Lokal geänderte, konfliktbehaftete, switched, external, locked oder mehrdeutige Pfade werden nicht gelöscht.
+- Unmittelbar vor dem Commit werden Status und Ziel-Diffs erneut geprüft; nur bei geändertem genehmigtem Umfang, wesentlichem Inhalt oder einem blockierenden SVN-Zustand wird angehalten und erneut geprüft.
+- Es werden keine breit gefassten `svn add`, `svn delete` oder `svn commit` verwendet.
+
+## Koreanische Commit-Nachrichten
+
+Für CLI-Commits wird eine temporäre UTF-8-Datei ohne BOM mit `--encoding UTF-8` verwendet:
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-Lesen Sie die Revision aus dem Commit-Ergebnis und prüfen Sie genau diese Revision:
-
-```powershell
-svn log --xml -r <revision-number> <repository-root-url>
-```
-
-Vergleichen Sie XML `<msg>` exakt mit der Originalnachricht. `--limit 1` ist wegen möglicher paralleler Commits kein gültiger Nachweis.
-
-## Details
-
-Englische Standarddokumentation: [`svn-precommit-review-guide.md`](svn-precommit-review-guide.md)
+Die temporäre Datei wird nach jedem Versuch gelöscht. Wenn der Repositoryzugriff es zulässt, wird die XML-Nachricht der tatsächlich erstellten Revision mit dem Original verglichen. Ist der gespeicherte koreanische Text beschädigt, meldet der Skill einen Fehler bei der Kodierungsprüfung und wiederholt den Commit nicht und ändert keine Revision Properties.

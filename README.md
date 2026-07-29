@@ -2,7 +2,7 @@
 
 `svn-precommit-review` is a Codex Agent Skill for reviewing SVN/TortoiseSVN working-copy changes before commit.
 
-It inspects structured `svn status` and `svn diff` data, checks common commit risks, drafts a Korean commit message, and asks for final human confirmation before any CLI commit. By default the review is read-only. If the user explicitly asks for commit preparation or auto-add, it may run narrow `svn add` only for required new files that would otherwise break build/runtime and pass the safety checks. If the user re-requests deletion for exact reviewed paths, it may run safe `svn delete` only for clean approved versioned files. Manual TortoiseSVN mode never runs `svn commit` or asks for CLI execution approval. Codex CLI commit mode is separate and requires an explicit request for Codex to commit followed by a clear affirmative answer to the direct execution question shown with the exact targets and message.
+It inspects structured `svn status` and `svn diff` data, checks common commit risks, and drafts a Korean commit message. The default is read-only review. When the user requests a Codex CLI commit, the skill can prepare clear required new source files, show the exact scope and message, and commit after one final affirmative reply. It never performs a broad working-copy commit.
 
 ## Translations
 
@@ -19,24 +19,26 @@ It inspects structured `svn status` and `svn diff` data, checks common commit ri
 
 - Build outputs and generated files
 - IDE or user-specific files
-- Logs, temporary files, cache files, and local config
+- Logs, temporary files, cache files, and local configuration
 - `.env`, tokens, passwords, API keys, and other secret-like changes
 - Conflict markers: `<<<<<<<`, `=======`, `>>>>>>>`
-- Unversioned files that may need manual `svn add` or safe auto-add
-- Deleted or missing files that may be accidental, or exact reviewed files that may be safely scheduled for deletion after re-request
+- Unversioned files that should be added for the reviewed change to build or run
+- Deleted or missing files that may be accidental
 - Remote freshness via `svn status -u` when available
 - Text, property, and tree conflicts; replaced, obstructed, switched, external, nested-working-copy, and lock states
 - Property changes including `svn:externals`, `svn:ignore`, and `svn:eol-style`
-- Test/build verification gaps
+- Test or build verification gaps
 
-## Commit Safety
+## Commit Behavior
 
-- `svn status --xml` and `svn status -u --xml` are parsed structurally.
-- Before asking for CLI approval, the skill fingerprints status, target diffs, property diffs, target paths, and approved file bytes with SHA-256. It repeats the snapshot immediately before commit and stops if anything changed; no message file is created before this comparison passes.
-- Locally modified files are never auto-deleted, and `svn delete` never receives a repository URL.
-- Commits prefer explicit file paths. Directory scope is accepted only after every changed descendant is reviewed and externals, nested working copies, switched paths, conflicts, and obstructions are absent.
+- Review-only and manual TortoiseSVN requests remain read-only.
+- For an explicit Codex CLI commit request, the skill may add clear required source, project, resource, and configuration files. Generated, local-only, ambiguous, or sensitive files remain excluded.
+- If the user asks to include reviewed deletions, the skill may schedule the listed clean versioned local paths. Locally modified, conflicted, switched, external, locked, or ambiguous files remain excluded.
+- The skill shows included paths, excluded paths, prepared adds/deletes, remaining risks, and the Korean message before committing.
+- After the final question, a clear reply such as `yes`, `네`, `응`, `진행해`, or `커밋해` authorizes the explicit CLI commit.
+- Immediately before committing, the skill repeats status and relevant diffs. It stops only if the approved scope, meaningful content, or a blocking SVN state changed.
+- Commits use explicit paths only. Broad `svn add`, `svn delete`, and `svn commit` are never used.
 - Secret candidates are reported by path and risk type only; values are replaced with `[REDACTED]`.
-- The committed revision is parsed from the commit result and verified with `svn log --xml -r <revision> <repository-root-url>`. The skill never uses the latest log entry as proof.
 
 ## Install
 
@@ -57,8 +59,6 @@ Copy [`svn-precommit-review/SKILL.md`](svn-precommit-review/SKILL.md) to one of 
 ## Requirements
 
 The `svn` command-line client must be available from your shell.
-
-Examples:
 
 ```powershell
 svn --version --quiet
@@ -81,53 +81,39 @@ Review a specific working copy:
 $svn-precommit-review <SVN_WORKING_COPY> 경로에서 svn status와 svn diff를 확인하고 커밋 가능 여부와 추천 커밋 메시지를 작성해줘.
 ```
 
-Review and then request a guarded commit:
+Review, prepare clear required files, and request a CLI commit:
 
 ```text
-$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토한 뒤, 문제가 없으면 커밋 전 최종 확인을 받고 승인된 파일만 커밋해줘.
+$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토하고 필요한 신규 소스 파일은 add한 뒤, 최종 확인을 받으면 승인 범위만 CLI로 커밋해줘.
 ```
 
-Review and safely add required build files:
+Include reviewed deletion candidates:
 
 ```text
-$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토하고, 빌드가 깨질 수 있는 필수 신규 파일은 안전 기준을 통과하면 svn add까지 해줘.
+$svn-precommit-review 방금 검토한 삭제 후보도 포함해서 커밋 준비해줘.
 ```
 
-Review first, then safely schedule exact reviewed files for deletion:
+After Codex shows the scope and message, reply once:
 
 ```text
-$svn-precommit-review 방금 검토한 path/to/obsolete-file.cs 삭제가 의도된 것이 맞으니, 안전 기준을 통과하면 svn delete로 삭제 예약해줘.
+네, 진행해
 ```
-
-After Codex shows the exact targets and message and asks whether to execute the CLI commit:
-
-```text
-응, 진행해.
-```
-
-A clear affirmative reply such as `yes`, `네`, `응`, or `진행해` authorizes the commit only when Codex CLI commit mode was already explicitly requested and Codex has just asked the direct execution question. For a review-only or manual TortoiseSVN request, Codex stops after the checklist without asking that question.
 
 ## Korean Commit Message Encoding
 
-Avoid this in PowerShell:
-
-```powershell
-svn commit -m "한글 커밋 메시지"
-```
-
-For CLI commits, use a BOM-free UTF-8 message file with LF line endings and explicitly pass `--encoding UTF-8`:
+For CLI commits, the skill writes the exact message to a BOM-free UTF-8 temporary file with LF line endings, then runs:
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-After commit, parse the committed revision from that commit command, obtain the repository root URL, and verify that exact revision:
+It removes the temporary file after the attempt and, when repository access permits, verifies the exact committed revision with:
 
 ```powershell
 svn log --xml -r <revision-number> <repository-root-url>
 ```
 
-Compare the XML `<msg>` value with the original message exactly. Plain `svn log` can look correct even when the stored `svn:log` value is broken by console encoding, while `--limit 1` may select another user's concurrent commit.
+If the stored Korean message is broken, the commit is reported as completed with an encoding-verification failure. The skill does not retry the commit or modify revision properties.
 
 ## Documentation
 
@@ -135,7 +121,7 @@ Compare the XML `<msg>` value with the original message exactly. Plain `svn log`
 
 ## Publishing Note
 
-This public package uses generic paths such as `<SVN_WORKING_COPY>` and `path/to/changed-file.cs`. Before publishing your own fork, scan Markdown and any generated artifacts you add so local paths or project-specific details do not leak.
+This public package uses generic paths such as `<SVN_WORKING_COPY>` and `path/to/changed-file.cs`. Before publishing your own fork, scan Markdown and generated artifacts so local paths or project-specific details do not leak.
 
 ## License
 

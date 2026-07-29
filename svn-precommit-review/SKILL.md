@@ -1,6 +1,6 @@
 ---
 name: svn-precommit-review
-description: SVN/TortoiseSVN 커밋 직전에 사용. svn status와 svn diff를 구조적으로 검토하고 위험 파일, 충돌, 누락 파일, property 변경, 민감정보 가능성을 점검한 뒤 한국어 커밋 메시지를 작성한다. 기본은 읽기 전용이다. 사용자가 명시적으로 요청한 경우에만 안전 기준을 통과한 필수 신규 파일의 svn add, 깨끗한 versioned 경로의 svn delete 예약, 최종 승인된 명시 경로의 CLI 커밋을 수행한다. CLI 커밋 전에는 승인 시점의 상태, diff, 파일 해시를 다시 비교하고, 한글 메시지는 BOM 없는 UTF-8 파일과 --encoding UTF-8을 사용하며 커밋 결과의 정확한 리비전으로 검증한다.
+description: SVN/TortoiseSVN 커밋 직전에 사용. svn status와 svn diff를 구조적으로 검토하고 위험 파일, 충돌, 누락 파일, property 변경, 민감정보 가능성을 점검한 뒤 한국어 커밋 메시지를 작성한다. 기본은 읽기 전용이다. 사용자가 CLI 커밋을 요청하면 필요한 신규 소스 파일을 안전하게 add하고, 검토 결과 뒤 한 번의 최종 확인으로 명시 범위만 커밋한다.
 ---
 
 # SVN Pre-commit Review
@@ -9,68 +9,40 @@ description: SVN/TortoiseSVN 커밋 직전에 사용. svn status와 svn diff를 
 
 Use this instruction-only skill immediately before an SVN/TortoiseSVN commit.
 
-Review the user-specified working copy without editing project content, judge commit readiness, explain only meaningful risks, and produce a concise Korean commit message and final checklist. Use the current directory only when the user did not specify another path, and never operate on a different working copy silently.
+Review the user-specified working copy, explain meaningful risks, draft a concise Korean commit message, and help prepare or execute a narrowly scoped CLI commit when the user asks. Use the current directory only when no path is supplied. Never silently switch to another working copy.
 
 ## Strict safety rules
 
-- Keep project files and `.svn` contents unchanged except for the explicitly gated SVN scheduling operations below.
-- Treat every SVN command not listed in **Allowed commands** as forbidden.
-- Never infer a successful check from missing, truncated, or failed command output.
-- Continue a review when remote access fails, but report `원격 최신 여부 확인 실패`.
-- Never expose a discovered secret value. Report only the path, optional line number, and risk type; replace the value with `[REDACTED]`.
-- Always output the review and commit result in Korean.
+- Always write review and commit results in Korean.
+- Default to read-only review. Do not run a write command unless the user asks for commit preparation, add/delete preparation, or a Codex CLI commit.
+- Keep project files and `.svn` contents unchanged. The only allowed mutations are the explicitly scoped `svn add`, `svn delete`, and `svn commit` commands below.
+- Never expose a secret value. Report only the path, optional line number, and risk type; replace values with `[REDACTED]`.
+- Continue when `svn status -u` fails due to network, certificate, authentication, or server errors. Report that remote freshness was not verified.
+- Never infer a successful check from missing, truncated, or failed output.
 
-Finalization modes:
+### Commit flow
 
-| Mode | Trigger | Final action |
-| --- | --- | --- |
-| TortoiseSVN manual | Default for review, message drafting, or manual commit requests | Do not ask for CLI approval and never run `svn commit`; stop after the checklist |
-| Codex CLI commit | The user explicitly asks Codex to commit | Show exact scope and message, take an approval snapshot, then ask the direct CLI execution question |
+1. For review-only or TortoiseSVN requests, stop after the Korean review and final checklist. Do not ask a CLI-commit question.
+2. For a request such as `CLI로 커밋해줘`, inspect the change, automatically prepare clear required files when allowed, and show the exact included scope, exclusions, remaining risks, and message.
+3. Ask one short final question: `이 범위와 메시지로 CLI 커밋할까요?`
+4. After that question, a clear reply such as `예`, `네`, `응`, `진행`, `진행해`, `커밋해`, or `커밋해줘` authorizes the CLI commit.
+5. Immediately before committing, rerun status and relevant diffs. Stop and re-review only when the approved scope, meaningful content, or blocking SVN state changed.
 
-In active CLI commit mode, a clear reply such as `예`, `네`, `응`, `진행해`, or `커밋해줘` approves execution only after the direct question `위 대상과 커밋 메시지로 Codex가 지금 CLI 커밋을 실행해도 될까요?`. A prior generic affirmative does not authorize a commit.
+### Add and delete preparation
 
-Mutation gates:
+- When the user asks for commit, commit preparation, or auto-add, automatically run `svn add` for an explicit unversioned source, project, resource, or required configuration file when its purpose is clear from the reviewed change or tracked references.
+- Do not add build output, generated bundles, IDE/user files, logs, caches, local settings, archives, dumps, backups, screenshots, `.env`, or likely secret-bearing files.
+- Inspect a directory recursively before adding it. Add it only when every child is clearly intended and safe; otherwise add only the safe explicit children and list the rest as excluded.
+- When the user asks to include reviewed deletions, allow `svn delete` or `svn delete --force` for explicitly listed clean versioned local candidates with clear deletion intent. A reply such as `삭제도 포함해줘` may approve the reviewed deletion candidates; do not require the user to repeat every path.
+- Never schedule deletion for a locally modified, conflicted, switched, external, locked, or ambiguous path. Never delete a repository URL, use `--keep-local`, or use a broad path.
 
-| Operation | Required conditions |
-| --- | --- |
-| Safe add | The user asked for preparation, auto-add, or commit; each explicit unversioned file is inside this working copy, inspected, non-sensitive, non-generated, and required by a tracked build/runtime reference |
-| Safe delete | The user re-requested exact reviewed paths; each target is a clean versioned local path with clear deletion intent and no conflict, remote change, switch, external boundary, lock anomaly, or local text/property modification |
-| CLI commit | CLI mode is active; exact targets and message were reviewed; blockers are absent; approval snapshot creation succeeded; the user approved the direct question; the pre-commit comparison is identical |
+### Korean commit message and cleanup
 
-Safe-add rules:
-
-- Add explicit files, not `.` or wildcards.
-- Exclude build output, generated bundles, IDE/user files, logs, caches, local config, archives, dumps, backups, screenshots, `.env`, and secret-bearing files.
-- Add a directory only after recursively inspecting every child and confirming that every added child passes the same rules.
-- If build/runtime necessity is uncertain, do not add it; report `수동 확인 후 add 필요`.
-
-Safe-delete rules:
-
-- Accept only working-copy filesystem paths. Never pass a URL to `svn delete`; URL deletion commits directly to the repository.
-- Do not automatically delete a file with local text or property modifications, even after a general deletion request. Report it for manual handling.
-- Use `svn delete <exact-local-path>` only for clean versioned targets.
-- Use `svn delete --force <exact-missing-path>` only when the reviewed target is already missing and the user explicitly approved that exact path.
-- Never use `--keep-local`.
-- Delete a directory only when every descendant has been inspected, is safe, and the user explicitly approved the whole tree.
-
-Approval snapshot rules:
-
-1. After all approved `svn add` and `svn delete` operations, but before asking the CLI execution question, freeze the ordered commit target list, excluded list, exact message, and working-copy root.
-2. Record in memory a SHA-256 fingerprint covering full `svn status --xml`, target-scoped `svn diff`, target property diff, and the ordered target list.
-3. Record SHA-256 for every approved existing file so binary or otherwise abbreviated diffs cannot hide content changes. Deleted paths are covered by status and diff.
-4. Record the `svn status -u --xml` result for the approved scope when remote access succeeds.
-5. Do not create snapshot files in the working copy.
-6. Immediately before commit, rerun the same commands and hashes. Any changed fingerprint, file hash, target list, property state, new unapproved local change, conflict, or approved-scope remote change invalidates approval. Stop, re-review, and ask again.
-
-Commit-message and post-commit rules:
-
-- Create the temporary message file only after the post-approval snapshot comparison passes. Use a unique OS-temp path outside the working copy, normalize the intended message to LF with no unintended trailing newline, and write it with a no-BOM encoder such as `[IO.File]::WriteAllText($path, $message, (New-Object Text.UTF8Encoding($false)))`. Do not use PowerShell `Out-File` or `Set-Content` defaults.
-- Use only `svn commit --file <message-file> --encoding UTF-8 <approved-paths>`. Never use `-m` for Korean text.
-- Prefer explicit file targets. A directory target is allowed only after recursive XML status confirms that every changed descendant exactly matches the approved set and no external, nested working copy, switched path, conflict, obstruction, or unapproved change exists.
-- Delete the message file after every commit attempt, including failures, and confirm it is absent.
-- On success, parse the committed revision `N` from that commit command's output. Never substitute `svn log --limit 1`, because concurrent commits can make it point to another revision.
-- Obtain the repository root URL with `svn info --show-item repos-root-url <working-copy-root>`, or parse `<root>` from `svn info --xml` when `--show-item` is unavailable. Run `svn log --xml -r N <repository-root-url>`, parse XML, confirm the `<logentry>` revision is `N`, and compare `<msg>` character-for-character with the original message.
-- If the revision cannot be parsed or exact log verification fails, report `확인 실패` without retrying the commit or changing revision properties. Broken historical log messages may require a server-side `pre-revprop-change` hook.
+- For Korean CLI messages, use a unique temporary file outside the working copy, written as UTF-8 without BOM and normalized to LF. Do not use PowerShell `-m`, `Out-File`, or default `Set-Content`.
+- Commit only with `svn commit --file <message-file> --encoding UTF-8 <explicit-approved-paths>`.
+- Delete the temporary message file after every commit attempt and confirm its absence.
+- Parse the committed revision from the commit command output. When repository access permits, verify that exact revision with `svn log --xml -r N <repository-root-url>` and compare the stored message character-for-character.
+- If message verification fails or shows broken Korean, report it. Do not retry the commit or attempt a revision-property change.
 
 ## Allowed commands
 
@@ -78,7 +50,7 @@ Read-only SVN commands:
 
 - `svn status`
 - `svn status --xml`
-- `svn status --xml --no-ignore` when ignored/unversioned scope must be inspected
+- `svn status --xml --no-ignore`
 - `svn status -u`
 - `svn status -u --xml`
 - `svn diff`
@@ -96,58 +68,49 @@ Conditionally allowed mutations:
 - `svn add <explicit-safe-paths>`
 - `svn delete <explicit-clean-local-paths>`
 - `svn delete --force <explicit-approved-missing-paths>`
-- `svn commit --file <message-file> --encoding UTF-8 <approved-paths>`
+- `svn commit --file <message-file> --encoding UTF-8 <explicit-approved-paths>`
 
-Use read-only local commands or APIs to inspect files, find nested `.svn` directories, search conflict/secret patterns, and compute SHA-256 in memory. In CLI mode only, create and remove the one temporary UTF-8 message file outside the working copy.
+Use read-only local commands or APIs to inspect files, search conflict/secret patterns, inspect nested `.svn` directories, and compare the final review scope. Create and remove only the one temporary message file outside the working copy during an approved CLI commit.
 
 ## Forbidden commands
 
 - Any SVN command not listed above, including `svn update`, `revert`, `cleanup`, `resolve`, `resolved`, `remove`, `rename`, `move`, `lock`, `unlock`, and revision-property writes.
-- `svn commit -m ...`, `svn commit --file ...` without `--encoding UTF-8`, a commit without explicit approved paths, or a commit after snapshot mismatch.
+- `svn commit -m ...`, a commit without `--encoding UTF-8`, or a commit without explicit approved paths.
 - Broad `svn add`, `svn delete`, or `svn commit` using `.`, `*`, an unreviewed directory, or another implicit recursive scope.
 - `svn delete <URL>`, `svn delete --keep-local`, or automatic deletion of locally modified files.
 - Automatic add of generated, local-only, ambiguous, ignored, or sensitive files.
-- A directory commit containing an external, nested working copy, switched path, conflict, obstruction, or descendant outside the exact approved set.
-- Any edit, format, generation, migration, build, or installer command that can rewrite project files.
 - Any direct `.svn` modification, automatic conflict resolution, automatic revert, or attempt to repair `svn:log`.
 
 ## Review workflow
 
-1. Resolve and state the working-copy root. Use `svn info` and obtain the repository root URL when CLI commit is requested.
-2. Run `svn status --xml` as the authoritative local-state scan. Use plain `svn status` only when a compact human-readable view helps.
-3. Run `svn status -u --xml` when possible. On network, certificate, server, or authentication failure, continue and report the failure.
-4. Run `svn diff --summarize`, `svn diff`, and `svn diff --properties-only` as applicable.
-5. Parse XML structurally rather than relying only on status-column text. Inspect:
-   - text `item` and property `props` states
-   - `tree-conflicted`, `switched`, and `wc-locked`
-   - local/repository lock presence or token mismatch
-   - repository-side status from `-u`
-   - actual status entries at `/status/target/entry`; never count an empty `<target>` node as a change
-6. Treat text/property conflicts, tree conflicts, obstructions, broken lock state, and approved-path out-of-date/remote changes as commit blockers. Review replaced (`R`), missing, deleted, switched, external, and nested-working-copy states explicitly.
-7. Inspect every property change. Highlight at least `svn:externals`, `svn:ignore`, `svn:eol-style`, `svn:mergeinfo`, `svn:mime-type`, `svn:needs-lock`, and `svn:executable` when changed.
-8. Inspect content for generated/local files, conflict markers `<<<<<<<`, `=======`, `>>>>>>>`, likely secrets, accidental deletion, large or formatting-only churn, and missing tests. Mask every sensitive value.
-9. If requested, perform only safe add/delete operations that pass their gates, then rerun structured status and relevant diffs.
-10. Infer intent from verified paths and diffs. Do not invent requirements, issue IDs, motivations, or test results. Draft a concise Korean message with only as many bullets as needed.
-11. Produce the six-section Korean review. For an empty status category, write `- 없음`; for no meaningful risk, write `특별한 위험 요소는 보이지 않습니다.`
-12. In manual mode, stop after the checklist without a CLI approval question.
-13. In CLI mode, create the approval snapshot, show exact included/excluded targets and message, then ask the direct execution question.
-14. After clear approval, compare the snapshot again. If it differs, do not create a message file. If it is identical, create the message file, commit, verify the exact revision, and clean up.
+1. Resolve and state the working-copy root with `svn info`.
+2. Run `svn status --xml` as the authoritative local scan. Use plain `svn status` when a compact display helps.
+3. Run `svn status -u --xml` when possible. On remote-check failure, continue and report the failure.
+4. Run `svn diff --summarize`, `svn diff`, and `svn diff --properties-only` when applicable.
+5. Inspect text and property states, tree conflicts, replacements, missing/deleted paths, obstructions, switched paths, externals, nested working copies, locks, and repository-side changes. Treat conflicts, obstructions, approved-scope out-of-date changes, and broken lock state as commit blockers.
+6. Inspect every property change. Highlight `svn:externals`, `svn:ignore`, `svn:eol-style`, `svn:mergeinfo`, `svn:mime-type`, `svn:needs-lock`, and `svn:executable` when changed.
+7. Inspect content for generated/local files, conflict markers `<<<<<<<`, `=======`, `>>>>>>>`, likely secrets, accidental deletion, unusually large or formatting-only churn, and missing tests. Mask secret values.
+8. When preparation was requested, perform only the safe add/delete actions above, then rerun status and relevant diffs.
+9. Infer intent only from verified paths and diffs. Do not invent issue IDs, requirements, or test results. Draft a concise Korean message: use 1-2 bullets for small changes and group broader work by intent, normally within 7 bullets.
+10. Produce the six-section Korean review. For an empty category write `- 없음`; when no meaningful risk exists write `특별한 위험 요소는 보이지 않습니다.`
+11. In CLI mode, show the final included and excluded paths, prepared add/delete paths, message, and remaining risks. Ask the one final question.
+12. After approval, rerun target-scoped `svn status --xml`, `svn diff --summarize`, `svn diff`, and property diff. If the approved scope or meaningful content changed, stop and show the new review; otherwise commit and verify the exact revision when possible.
 
 ## Risk checklist
 
-Report only applicable risks, grouped by meaning:
+Report only applicable risks:
 
-- Excluded files: build/generated output, IDE/user files, logs, temp/cache files, local config, archives, dumps, backups, screenshots.
-- Sensitive data: `.env`, token, password, API/access key, private key, credential, private URL, or connection string. Never quote its value.
-- Blocking SVN state: text/property/tree conflict, obstruction, broken lock, approved-path out-of-date/remote change, or post-approval snapshot mismatch.
-- Review-required SVN state: unversioned, added, missing, deleted, replaced, switched, external, nested working copy, directory target, or significant property change.
+- Excluded files: build/generated output, IDE/user files, logs, temporary/cache files, local config, archives, dumps, backups, screenshots.
+- Sensitive data: `.env`, token, password, API/access key, private key, credential, private URL, or connection string.
+- Blocking SVN state: text/property/tree conflict, obstruction, broken lock, or approved-path out-of-date/remote change.
+- Review-required SVN state: unversioned, added, missing, deleted, replaced, switched, external, nested working copy, directory scope, or significant property change.
 - Content risk: conflict marker, suspiciously large/generated diff, mixed formatting and logic, accidental deletion, or risky logic without tests.
-- Verification risk: tests not run, partial validation, remote freshness failure, snapshot failure, revision parse failure, or exact message mismatch.
-- Encoding risk: PowerShell `-m`, message file without explicit UTF-8, BOM/default-encoding ambiguity, leftover temporary message file, or use of latest-log lookup instead of the committed revision.
+- Verification risk: tests not run, partial validation, remote freshness failure, final scope change, revision parse failure, or exact message mismatch.
+- Encoding risk: PowerShell `-m`, message file without explicit UTF-8, BOM/default-encoding ambiguity, leftover temporary message file, or broken stored Korean message.
 
 ## Output format
 
-Always write the result in Korean using this structure. Keep descriptions concise and write `- 없음` under empty file-state categories.
+Always write the result in Korean using this structure.
 
 ````markdown
 # SVN 커밋 전 검토 결과
@@ -162,13 +125,13 @@ Always write the result in Korean using this structure. Keep descriptions concis
 ## 2. 변경 파일 요약
 
 ### Modified
-- `path`: 변경 의미
+- `path`: 변경 내용
 
 ### Added / Unversioned
-- `path`: 의미와 add 상태
+- `path`: add 상태 또는 add 예정
 
 ### Deleted / Missing
-- `path`: 삭제 의도와 delete 상태
+- `path`: 삭제 의도 또는 delete 예정
 
 ### Conflicted
 - `path`: text/property/tree conflict 상태
@@ -177,7 +140,7 @@ Always write the result in Korean using this structure. Keep descriptions concis
 - `path`: 원격 상태
 
 ### Other
-- `path`: replaced, obstructed, switched, external, nested working copy, lock, property 등
+- `path`: replaced, obstructed, switched, external, nested working copy, lock, property 변경
 
 ## 3. 커밋 전 확인 필요 항목
 
@@ -210,7 +173,7 @@ Always write the result in Korean using this structure. Keep descriptions concis
 
 ## 6. TortoiseSVN에서 할 일
 
-- [ ] Check for Modifications에서 포함/제외 대상 확인
+- [ ] Check for Modifications에서 포함/제외 범위 확인
 - [ ] 파일 및 property Diff 확인
 - [ ] 필요한 신규 파일과 삭제 예약만 확인
 - [ ] 충돌, missing, remote, external, switched, lock 상태 확인
@@ -222,49 +185,34 @@ Always write the result in Korean using this structure. Keep descriptions concis
 - 자동 add: 없음 / ...
 - 삭제 예약: 없음 / ...
 - 제외: 없음 / ...
-- 남은 확인 사항: 없음 / ...
-- 승인 스냅샷: 수동 모드로 해당 없음 / 기록 완료 / 생성 실패
 - 실행 방식: TortoiseSVN 수동 / Codex CLI
-
-마지막 안내:
-- 수동 모드: `Codex는 svn commit을 실행하지 않습니다. 위 내용을 확인한 뒤 TortoiseSVN에서 직접 커밋해 주세요.`
-- CLI 모드: `위 대상과 커밋 메시지로 Codex가 지금 CLI 커밋을 실행해도 될까요? "예", "네", "응", "진행해"처럼 명확히 동의하면 CLI 커밋을 실행합니다.`
 ````
 
-Use only the one mode-appropriate final sentence. Use 1-2 summary/message bullets for small changes; group broader work by intent and normally stay within 7 bullets. Include an issue ID only when clearly evidenced.
-
-Judgment:
-
-- `가능`: required files are tracked, blockers are absent, scope is understood, and validation is adequate.
-- `조건부 가능`: specific manual confirmation, tests, add/delete action, property review, or remote check remains.
-- `보류 권장`: conflict, likely secret, obstruction, broken lock, suspicious deletion, unsafe scope, out-of-date target, snapshot mismatch, or insufficient understanding exists.
-
-After a CLI commit attempt, append:
+In CLI mode, append this section after the commit attempt:
 
 ````markdown
 ## 7. 커밋 실행 결과
 
-- 사전 스냅샷 비교: 일치 / 불일치로 중단 / 확인 실패
+- 최종 범위 재확인: 일치 / 변경으로 중단 / 확인 실패
 - 실행 결과: 성공 / 실패 / 결과 불명확
 - 커밋 리비전: rN / 확인 실패
-- 커밋 대상: ...
-- 메시지 검증: `svn log --xml -r N <repository-root-url>` 기준 원문과 정확히 일치 / 불일치 / 확인 실패
+- 메시지 검증: 정확히 일치 / 불일치 / 확인 실패
 - 임시 메시지 파일: 해당 없음 / 삭제 완료 / 삭제 실패
 - 최종 SVN 상태: 확인 결과
-- 남은 조치: 없음 / ...
+- 후속 조치: 없음 / ...
 ````
 
-Never expose the temporary file's machine-specific absolute path or any secret value in the result. If commit success is ambiguous, do not retry automatically.
+Judgment:
+
+- `가능`: 필수 파일이 추적되었거나 자동 준비되었고, 차단 요인이 없으며 범위와 검증이 충분하다.
+- `조건부 가능`: 테스트, 원격 확인, property 검토, 모호한 파일, 또는 의도 확인이 남아 있다.
+- `보류 권장`: 충돌, 민감정보 가능성, obstruction, broken lock, 의심스러운 삭제, 위험한 범위, out-of-date 대상, 또는 변경 의도 불명이 있다.
 
 ## TortoiseSVN final checklist
 
-Use section 6 as the single checklist; do not repeat the same risks elsewhere merely to fill space.
+Use section 6 as the single operational checklist. Keep detailed file explanations in section 2 and do not repeat low-value warnings.
 
-- Include only actions relevant to the observed working copy.
-- Put detailed per-file explanations in section 2 and keep section 6 operational.
-- Require manual review of automatically added and scheduled-delete paths.
-- Require property review when XML or diff reports property changes.
-- In manual mode, instruct the user to paste the Korean message into TortoiseSVN and stop.
-- In CLI mode, show the frozen scope/message and snapshot status before asking the direct question.
-- After CLI commit, verify only the revision parsed from that commit output; never use `--limit 1` as proof.
-- Do not create a temporary message file before the post-approval comparison passes. Report `해당 없음` when none was created; otherwise confirm cleanup and report any verification gap explicitly.
+- In manual mode, tell the user to paste the Korean message into TortoiseSVN and stop.
+- In CLI mode, ask only the one final question after showing the final scope and message.
+- After a CLI commit, verify only the revision parsed from that command output; never use `--limit 1` as proof.
+- Report temporary message-file cleanup and any encoding-verification gap without exposing its machine-specific path.
