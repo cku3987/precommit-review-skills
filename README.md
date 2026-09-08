@@ -2,7 +2,7 @@
 
 `svn-precommit-review` is a Codex Agent Skill for reviewing SVN/TortoiseSVN working-copy changes before commit.
 
-It inspects structured `svn status` and `svn diff` data, checks common commit risks, and drafts a Korean commit message. The default is read-only review. When the user requests a Codex CLI commit, the skill can prepare clear required new source files, show the exact scope and message, and commit after one final affirmative reply. It never performs a broad working-copy commit.
+It inspects structured `svn status` and `svn diff` data, checks common commit risks, and drafts a Korean commit message. By default, it also adds clear required new files after inspecting their references, content, and SVN state. Explicit read-only requests make no changes. When the user requests a commit, the skill shows the exact scope and message and commits through the CLI after one final affirmative reply. It never performs a broad working-copy commit.
 
 ## Translations
 
@@ -31,12 +31,14 @@ It inspects structured `svn status` and `svn diff` data, checks common commit ri
 
 ## Commit Behavior
 
-- Review-only and manual TortoiseSVN requests remain read-only.
-- For an explicit Codex CLI commit request, the skill may add clear required source, project, resource, and configuration files. Generated, local-only, ambiguous, or sensitive files remain excluded.
+- A bare skill invocation or general review request includes safe preparation of required new files. Explicit review-only, read-only, message-only, and no-change requests make no writes.
+- Required source, project, resource, and non-local configuration files are automatically added when tracked references or the reviewed change establish their purpose and scope. Generated, ignored, local-only, ambiguous, excluded, or sensitive files are not added.
+- Add is reported as completed only after command success and SVN `A` status verification. Successfully prepared files are not repeated as unresolved missing-source warnings. Independent code risks remain visible but do not prevent safe file preparation.
+- Manual TortoiseSVN requests allow this preparation unless read-only was requested, but never trigger a CLI commit.
 - If the user asks to include reviewed deletions, the skill may schedule the listed clean versioned local paths. Locally modified, conflicted, switched, external, locked, or ambiguous files remain excluded.
 - The skill shows included paths, excluded paths, prepared adds/deletes, remaining risks, and the Korean message before committing.
-- After the final question, a clear reply such as `yes`, `네`, `응`, `진행해`, or `커밋해` authorizes the explicit CLI commit.
-- Immediately before committing, the skill repeats status and relevant diffs. It stops only if the approved scope, meaningful content, or a blocking SVN state changed.
+- A natural commit request such as `커밋해줘` is enough to enter CLI mode; no `CLI` keyword is required. After the final scope-and-message question, a clear reply such as `yes`, `네`, `응`, `진행해`, or `커밋해` authorizes that commit.
+- Immediately before committing, the skill repeats status and relevant diffs. Existing final approval is reused across turns unless meaningful scope/content or blocking state changes require a new review.
 - Commits use explicit paths only. Broad `svn add`, `svn delete`, and `svn commit` are never used.
 - Secret candidates are reported by path and risk type only; values are replaced with `[REDACTED]`.
 
@@ -69,22 +71,22 @@ TortoiseSVN users can install the command-line client during TortoiseSVN setup, 
 
 ## Usage
 
-Review only:
+Default review and required-file preparation:
 
 ```text
-$svn-precommit-review 현재 SVN working copy 변경사항을 커밋 전에 검토하고, 최종 결과는 한국어로 작성해줘.
+$svn-precommit-review 현재 SVN working copy 변경사항을 검토해줘.
 ```
 
-Review a specific working copy:
+Read-only review (no add, delete, or commit):
 
 ```text
-$svn-precommit-review <SVN_WORKING_COPY> 경로에서 svn status와 svn diff를 확인하고 커밋 가능 여부와 추천 커밋 메시지를 작성해줘.
+$svn-precommit-review <SVN_WORKING_COPY> 경로를 읽기 전용으로 검토만 하고 한국어 커밋 메시지를 작성해줘. svn add/delete/commit은 실행하지 마.
 ```
 
 Review, prepare clear required files, and request a CLI commit:
 
 ```text
-$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토하고 필요한 신규 소스 파일은 add한 뒤, 최종 확인을 받으면 승인 범위만 CLI로 커밋해줘.
+$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 커밋해줘.
 ```
 
 Include reviewed deletion candidates:
@@ -98,6 +100,8 @@ After Codex shows the scope and message, reply once:
 ```text
 네, 진행해
 ```
+
+Summaries group changes by intent, not a fixed bullet count. Prior test results are reused only with evidence that they still cover the reviewed content and are labeled as not rerun. The skill does not run builds or tests that would modify the working copy.
 
 ## Korean Commit Message Encoding
 

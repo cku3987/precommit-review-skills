@@ -4,12 +4,12 @@
 
 `svn-precommit-review` is a Codex Agent Skill for reviewing SVN/TortoiseSVN working-copy changes immediately before commit. Its review result and commit message are always written in Korean.
 
-The default is a read-only review. When the user explicitly requests commit preparation or a Codex CLI commit, the skill can:
+The default is review plus safe preparation of required new files. Explicit read-only, review-only, message-only, or no-change requests make no writes. The workflow is:
 
-- add clear required source, project, resource, and configuration files
+- automatically add clear required source, project, resource, and non-local configuration files, then verify their SVN `A` state
 - schedule reviewed clean deletion candidates when the user asks to include them
 - show the exact scope, exclusions, risks, and message
-- execute a narrow CLI commit after one final affirmative reply
+- execute a narrow CLI commit only when a commit was requested and the final scope and message received one affirmative reply
 
 It never uses broad working-copy mutations such as `svn add .`, `svn delete .`, or `svn commit .`.
 
@@ -40,22 +40,22 @@ TortoiseSVN users can install the command-line client during TortoiseSVN setup, 
 
 ## Usage
 
-Review only:
+Default review and required-file preparation:
 
 ```text
-$svn-precommit-review 현재 SVN 변경사항을 커밋 전에 검토하고 한국어 커밋 메시지를 작성해줘.
+$svn-precommit-review 현재 SVN 변경사항을 검토해줘.
 ```
 
-Review a specific working copy:
+Read-only review of a specific working copy:
 
 ```text
-$svn-precommit-review <SVN_WORKING_COPY> 경로의 변경사항을 검토해줘.
+$svn-precommit-review <SVN_WORKING_COPY> 경로를 읽기 전용으로 검토만 해줘. svn add/delete/commit은 실행하지 마.
 ```
 
 Prepare clear required files and request a CLI commit:
 
 ```text
-$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 검토하고 필요한 신규 소스 파일은 add한 뒤, 최종 확인을 받으면 승인 범위만 CLI로 커밋해줘.
+$svn-precommit-review <SVN_WORKING_COPY> 변경사항을 커밋해줘.
 ```
 
 Include reviewed deletion candidates:
@@ -89,9 +89,13 @@ Remote-check failures caused by network, authentication, certificate, or server 
 
 ### Safe add
 
-When the user requests commit preparation, auto-add, or a CLI commit, the skill may add explicit unversioned files only when they are clearly intended source, project, resource, or required configuration files in the reviewed change.
+Default preparation and CLI modes inspect unversioned files, including content absent from `svn diff`. Tracked project/build references, imports, or the reviewed change must establish that the source, project, resource, or non-local configuration file is required and within scope. Eligible files are added without a separate add question, not merely listed as a recommendation.
 
-It excludes generated outputs, local settings, IDE state, logs, archives, caches, screenshots, `.env` files, and likely secret-bearing or ambiguous files. A directory is inspected recursively before it is added.
+Generated outputs, ignored files, local settings, IDE state, logs, archives, caches, screenshots, `.env` files, and likely secret-bearing or ambiguous files stay excluded. User exclusions and explicit file limits take precedence. A directory is inspected recursively before addition; mixed directories use `svn add --depth empty <parent>` for the necessary safe parents, followed by explicit safe files. The skill does not recursively add their generated or sensitive siblings.
+
+Completion requires command success and a subsequent `svn status --xml` result of `added` (`A`), plus review of resulting content and properties. A successful addition appears in the changed-file summary. Failed or unverified additions remain unresolved, with the actual error. Independent logic or test risks do not prevent safe add, and add does not count as fixing those risks or proving a build.
+
+For example, when a tracked project references an eligible new source file, the result should record the verified add in the file summary instead of asking the user to add it again. In explicit read-only mode, that same file stays untracked and is correctly reported as unresolved.
 
 ### Safe delete
 
@@ -101,9 +105,17 @@ It never deletes a repository URL, a broad path, a locally modified path, or a c
 
 ### Final confirmation
 
-For an explicit CLI commit request, the skill shows the final included paths, exclusions, prepared adds/deletes, risks, and Korean message. It then asks one final question.
+Natural commit requests such as `커밋해줘` enter CLI mode without requiring the word `CLI`. Bare invocation and preparation-only requests stop after review; explicit manual TortoiseSVN requests do not trigger a CLI commit. In CLI mode, the skill shows final included paths, exclusions, prepared adds/deletes, risks, and the exact Korean message, then asks one final question.
 
-A clear answer such as `예`, `네`, `응`, `진행`, `진행해`, `커밋해`, or `커밋해줘` authorizes the commit. Immediately before execution, the skill reruns status and target diffs. It stops only if the approved scope, meaningful content, or a blocking SVN state changed.
+A clear answer such as `예`, `네`, `응`, `진행`, `진행해`, `커밋해`, or `커밋해줘` to that question authorizes the shown scope and message across turns. Immediately before execution, the skill reruns status and relevant target diffs. Meaningful scope/content changes or new commit blockers require re-review; unchanged approval is not requested again. The initial commit request alone is not final confirmation.
+
+### Review and test evidence
+
+Report only unresolved, meaningful risks in the pre-commit action section. Keep verified preparation results in the file summary and group summaries by intent without a fixed bullet count. On follow-up, report the changed review or execution outcome rather than repeating unchanged sections.
+
+Judge readiness for the intended commit scope after preparation. Missing required build files or evidence-backed serious logic risks warrant recommending a hold. Files verified as excluded, including local secret candidates, do not by themselves block an otherwise valid commit; directory targets must not include them.
+
+Prior tests or builds may be cited only with observed evidence that the relevant reviewed content is unchanged. State that the result came from an earlier run and was not rerun. Otherwise report the verification gap; the skill does not run builds/tests that would modify the working copy.
 
 ## Korean Commit Message Encoding
 
@@ -113,7 +125,7 @@ The skill writes the Korean message to a unique temporary file outside the worki
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-The temporary file is removed after every attempt. The skill parses the committed revision from the commit output and, when repository access permits, checks the exact revision through:
+The temporary file is removed in a `finally` cleanup path after success, failure, or cancellation, including errors before execution; its absence is checked. The skill parses the committed revision from the commit output and, when repository access permits, checks the exact revision through:
 
 ```powershell
 svn log --xml -r <revision-number> <repository-root-url>

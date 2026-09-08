@@ -1,6 +1,6 @@
 # Guía de svn-precommit-review
 
-`svn-precommit-review` es una habilidad de Codex Agent para revisar una copia de trabajo SVN/TortoiseSVN antes del commit y crear un mensaje de commit en coreano. Por defecto funciona en modo de solo lectura. Cuando el usuario solicita explícitamente un commit mediante Codex CLI, puede hacer add de los nuevos archivos fuente necesarios y, tras una única confirmación final, confirmar solo el alcance aprobado.
+`svn-precommit-review` es una habilidad de Codex Agent para revisar una copia de trabajo SVN/TortoiseSVN antes del commit y crear un mensaje de commit en coreano. Por defecto revisa y ejecuta automáticamente `svn add` para los nuevos archivos necesarios que cumplen los criterios de seguridad. El commit requiere una solicitud del usuario y una única confirmación final del alcance y el mensaje; solo incluye el alcance aprobado.
 
 ## Instalación
 
@@ -18,19 +18,25 @@ Copie `svn-precommit-review/SKILL.md` de este repositorio a la ubicación elegid
 
 ## Uso
 
+Revisión y preparación predeterminadas de archivos necesarios (una petición genérica como «revisa» o `검토해줘` hace lo mismo):
+
+```text
+$svn-precommit-review
+```
+
 Revisión de solo lectura:
 
 ```text
-$svn-precommit-review Revisa los cambios actuales de SVN antes del commit y crea un mensaje de commit en coreano.
+$svn-precommit-review Solo revisa los cambios actuales de SVN en modo de solo lectura. No ejecutes svn add/delete/commit.
 ```
 
-Solicitar un commit por CLI:
+Solicitar revisión y commit:
 
 ```text
-$svn-precommit-review Revisa los cambios de <SVN_WORKING_COPY>, haz add de los nuevos archivos fuente necesarios y, tras la confirmación final, confirma por CLI solo el alcance aprobado.
+$svn-precommit-review Revisa los cambios de <SVN_WORKING_COPY> y haz el commit.
 ```
 
-Después de mostrar el alcance y el mensaje, responda una vez de forma clara.
+Si solicitó un commit, compruebe los archivos incluidos y excluidos, los add/delete preparados, los riesgos pendientes y el mensaje, y responda una vez a la pregunta final. Basta con pedir «haz el commit» o `커밋해줘`; no es necesario decir `CLI`.
 
 ```text
 네, 진행해
@@ -40,19 +46,25 @@ Después de mostrar el alcance y el mensaje, responda una vez de forma clara.
 
 - Revisa `svn status --xml`, estado remoto, diff de contenido y diff de properties.
 - Revisa archivos generados, archivos de IDE/usuario, registros, configuración local, datos sensibles, conflictos, archivos ausentes y falta de pruebas.
-- Ante una solicitud de commit por CLI, puede ejecutar `svn add` para archivos fuente, proyectos, recursos y configuración necesaria cuya intención sea clara.
-- No agrega `bin`, `obj`, registros, caché, archivos comprimidos, `.env`, archivos con posibles secretos, generados o ambiguos.
+- En la revisión predeterminada, debe ejecutar automáticamente `svn add` para archivos sin versionar de código fuente, proyectos, recursos y configuración no exclusiva del entorno local cuya necesidad esté respaldada por referencias en archivos versionados o cambios revisados. Si se cumplen los criterios, no basta con recomendarlo.
+- Las solicitudes explícitas de solo lectura, solo revisión, solo mensaje o ningún cambio no permiten ninguna escritura. Una petición genérica de revisión incluye la preparación predeterminada.
+- Solo marca una adición como completada tras comprobar el éxito del comando add y el estado `A` en `svn status`. Las adiciones completadas figuran en el resumen de archivos, no como advertencias pendientes.
+- Un add seguro e independiente puede continuar aunque quede un riesgo en el código. Ese riesgo se sigue notificando; el add no se presenta como una corrección del código.
+- No agrega `bin`, `obj`, archivos generados, de IDE/usuario, registros, temporales, caché, configuración local, archivos comprimidos, volcados, copias de seguridad, capturas de pantalla, archivos ignorados, `.env`, archivos con posibles secretos ni ambiguos. Antes de agregar un directorio revisa todo su contenido recursivamente; si no es seguro en su totalidad, agrega solo las rutas concretas seguras.
 - Cuando se solicita incluir candidatos de eliminación revisados, solo programa la eliminación de rutas locales versioned limpias.
 - No elimina rutas modificadas localmente, en conflicto, switched, external, locked o ambiguas.
-- Antes del commit vuelve a revisar el estado y los diffs objetivo; solo se detiene y revisa de nuevo si cambió el alcance aprobado, el contenido significativo o un estado SVN bloqueante.
+- El commit requiere una solicitud y la aprobación final del alcance exacto y el mensaje. Conserva la aprobación previa del mismo alcance y contenido, y vuelve a comprobar status y los diffs de contenido y propiedades antes del commit. Solo revisa y pide confirmación de nuevo si cambia sustancialmente el alcance o el contenido, o cambia un estado bloqueante.
+- Si se elige explícitamente el commit manual con TortoiseSVN, termina con la revisión y la lista de comprobación, sin commit por CLI ni pregunta para ejecutarlo. La preparación segura predeterminada sigue activa salvo que se pida solo lectura.
 - No usa `svn add`, `svn delete` ni `svn commit` de alcance amplio.
+
+Las indicaciones durante la ejecución, la revisión, el mensaje de commit y los resultados se redactan siempre en coreano. Los resúmenes se agrupan por intención, sin un número fijo de puntos ni detalles excesivos. Solo reutiliza pruebas anteriores con evidencia real aplicable al contenido revisado sin cambios, y las identifica como resultados anteriores, no ejecutados de nuevo.
 
 ## Mensajes de commit en coreano
 
-Para commits por CLI usa un archivo temporal UTF-8 sin BOM y `--encoding UTF-8`:
+Para commits por CLI crea fuera de la copia de trabajo un archivo temporal único en UTF-8 sin BOM y con saltos de línea LF, y usa `--file` y `--encoding UTF-8`:
 
 ```powershell
 svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 ```
 
-El archivo temporal se elimina después de cada intento. Cuando el acceso al repositorio lo permite, compara el mensaje XML de la revisión realmente creada. Si el coreano almacenado está dañado, informa un fallo de verificación de codificación y no reintenta el commit ni modifica revision properties.
+El archivo temporal se elimina después de cada intento y se confirma su ausencia. Cuando el acceso al repositorio lo permite, compara carácter por carácter el mensaje del registro XML de la revisión real identificada en la salida del commit con el original. Si el coreano almacenado está dañado, informa un fallo de verificación de codificación y no reintenta el commit ni modifica revision properties.

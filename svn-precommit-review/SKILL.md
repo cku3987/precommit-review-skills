@@ -1,6 +1,6 @@
 ---
 name: svn-precommit-review
-description: SVN/TortoiseSVN 커밋 직전에 사용. svn status와 svn diff를 구조적으로 검토하고 위험 파일, 충돌, 누락 파일, property 변경, 민감정보 가능성을 점검한 뒤 한국어 커밋 메시지를 작성한다. 기본은 읽기 전용이다. 사용자가 CLI 커밋을 요청하면 필요한 신규 소스 파일을 안전하게 add하고, 검토 결과 뒤 한 번의 최종 확인으로 명시 범위만 커밋한다.
+description: SVN/TortoiseSVN 커밋 전에 변경사항과 위험을 검토하고 한국어 커밋 메시지를 작성한다. 기본 실행은 명확히 필요한 신규 파일의 안전한 svn add까지 포함한다. 읽기 전용 요청은 변경 없이 검토하며, 커밋 요청 시 범위와 메시지에 대한 최종 확인 한 번 뒤 명시한 대상만 CLI로 커밋한다.
 ---
 
 # SVN Pre-commit Review
@@ -9,30 +9,33 @@ description: SVN/TortoiseSVN 커밋 직전에 사용. svn status와 svn diff를 
 
 Use this instruction-only skill immediately before an SVN/TortoiseSVN commit.
 
-Review the user-specified working copy, explain meaningful risks, draft a concise Korean commit message, and help prepare or execute a narrowly scoped CLI commit when the user asks. Use the current directory only when no path is supplied. Never silently switch to another working copy.
+Review the user-specified working copy, prepare clear required new files, explain remaining risks, and draft a concise Korean commit message. Execute a narrowly scoped CLI commit only when requested and finally confirmed. Use the current directory only when no path is supplied. Never silently switch to another working copy or expand an explicitly limited file scope.
 
 ## Strict safety rules
 
 - Always write review and commit results in Korean.
-- Default to read-only review. Do not run a write command unless the user asks for commit preparation, add/delete preparation, or a Codex CLI commit.
-- Keep project files and `.svn` contents unchanged. The only allowed mutations are the explicitly scoped `svn add`, `svn delete`, and `svn commit` commands below.
+- Follow the user's explicit mode and exclusions. Default skill invocation includes review and safe required-file add, not permission to commit or delete.
+- Do not edit project file contents or directly modify `.svn`. Only the scoped SVN mutations and temporary message-file operations below are allowed.
 - Never expose a secret value. Report only the path, optional line number, and risk type; replace values with `[REDACTED]`.
 - Continue when `svn status -u` fails due to network, certificate, authentication, or server errors. Report that remote freshness was not verified.
 - Never infer a successful check from missing, truncated, or failed output.
 
-### Commit flow
+### Execution mode and confirmation
 
-1. For review-only or TortoiseSVN requests, stop after the Korean review and final checklist. Do not ask a CLI-commit question.
-2. For a request such as `CLI로 커밋해줘`, inspect the change, automatically prepare clear required files when allowed, and show the exact included scope, exclusions, remaining risks, and message.
-3. Ask one short final question: `이 범위와 메시지로 CLI 커밋할까요?`
-4. After that question, a clear reply such as `예`, `네`, `응`, `진행`, `진행해`, `커밋해`, or `커밋해줘` authorizes the CLI commit.
-5. Immediately before committing, rerun status and relevant diffs. Stop and re-review only when the approved scope, meaningful content, or blocking SVN state changed.
+- **Read-only:** explicit `검토만`, `읽기 전용`, `메시지만`, or no-change requests prohibit add, delete, commit, and temporary-file creation. Report required but untracked files without changing them.
+- **Prepare (default):** a bare skill invocation or a general request such as `검토해줘` reviews and automatically adds clear required files. Stop after the review unless a commit is requested. Explicit manual TortoiseSVN requests use this preparation but never trigger a CLI commit; read-only instructions still take precedence.
+- **CLI commit:** `커밋해줘` or equivalent requests enter this mode; the literal word `CLI` is not required. A preparation-only request does not. Show included paths, exclusions, preparation results, remaining risks, and the exact message, then ask once: `이 범위와 메시지로 CLI 커밋할까요?`
+- A clear reply such as `예`, `네`, `응`, `진행`, `진행해`, `커밋해`, or `커밋해줘` to that final question authorizes that scope and message. Carry this authorization across turns; do not restart the approval flow because the user did not repeat `CLI` or every path.
+- Immediately before committing, rerun target status and relevant diffs. Request renewed approval only for substantive scope/content changes or newly discovered commit blockers. Otherwise use the existing final approval. An initial commit request alone is not the final confirmation.
 
 ### Add and delete preparation
 
-- When the user asks for commit, commit preparation, or auto-add, automatically run `svn add` for an explicit unversioned source, project, resource, or required configuration file when its purpose is clear from the reviewed change or tracked references.
+- In prepare or CLI mode, inspect unversioned candidates even though `svn diff` does not include their contents. Use tracked project/build references, imports, or the reviewed change to establish that each source, project, resource, or non-local configuration file is required and within scope. Inspect its content and SVN/ignore state before adding it.
+- When these checks pass, run `svn add` on the explicit safe paths without asking a separate add question. Do not stop at a recommendation that an essential source file should be added. An explicitly excluded or out-of-scope dependency needs a reported scope decision, not an automatic override.
 - Do not add build output, generated bundles, IDE/user files, logs, caches, local settings, archives, dumps, backups, screenshots, `.env`, or likely secret-bearing files.
-- Inspect a directory recursively before adding it. Add it only when every child is clearly intended and safe; otherwise add only the safe explicit children and list the rest as excluded.
+- Inspect unversioned directories recursively; status may show only the parent. Add a directory recursively only when every included child is intended and safe. For mixed content, schedule necessary safe parent directories from the top down with `svn add --depth empty <parent>`, then add only the explicit safe files. Do not force-add ignored files or cross externals/nested working copies.
+- Check the command result and rerun `svn status --xml`; report add completed only when the path is `added` (`A`). Review its resulting content and properties. A failed or unverified add remains an unresolved item with the actual error; a successful add belongs in the file summary, not a stale missing-source warning.
+- Prepare independent safe files even when a code finding or test gap remains. Adding a file does not fix its logic or prove a build; keep those findings for commit judgment. Block a preparation action only when the affected path cannot itself be safely prepared.
 - When the user asks to include reviewed deletions, allow `svn delete` or `svn delete --force` for explicitly listed clean versioned local candidates with clear deletion intent. A reply such as `삭제도 포함해줘` may approve the reviewed deletion candidates; do not require the user to repeat every path.
 - Never schedule deletion for a locally modified, conflicted, switched, external, locked, or ambiguous path. Never delete a repository URL, use `--keep-local`, or use a broad path.
 
@@ -40,7 +43,7 @@ Review the user-specified working copy, explain meaningful risks, draft a concis
 
 - For Korean CLI messages, use a unique temporary file outside the working copy, written as UTF-8 without BOM and normalized to LF. Do not use PowerShell `-m`, `Out-File`, or default `Set-Content`.
 - Commit only with `svn commit --file <message-file> --encoding UTF-8 <explicit-approved-paths>`.
-- Delete the temporary message file after every commit attempt and confirm its absence.
+- Use a `finally` cleanup path: remove only this temporary message file after success, failure, or cancellation, including errors before the commit command. Confirm its absence.
 - Parse the committed revision from the commit command output. When repository access permits, verify that exact revision with `svn log --xml -r N <repository-root-url>` and compare the stored message character-for-character.
 - If message verification fails or shows broken Korean, report it. Do not retry the commit or attempt a revision-property change.
 
@@ -66,6 +69,7 @@ Read-only SVN commands:
 Conditionally allowed mutations:
 
 - `svn add <explicit-safe-paths>`
+- `svn add --depth empty <explicit-safe-parent-directory>`
 - `svn delete <explicit-clean-local-paths>`
 - `svn delete --force <explicit-approved-missing-paths>`
 - `svn commit --file <message-file> --encoding UTF-8 <explicit-approved-paths>`
@@ -90,11 +94,11 @@ Use read-only local commands or APIs to inspect files, search conflict/secret pa
 5. Inspect text and property states, tree conflicts, replacements, missing/deleted paths, obstructions, switched paths, externals, nested working copies, locks, and repository-side changes. Treat conflicts, obstructions, approved-scope out-of-date changes, and broken lock state as commit blockers.
 6. Inspect every property change. Highlight `svn:externals`, `svn:ignore`, `svn:eol-style`, `svn:mergeinfo`, `svn:mime-type`, `svn:needs-lock`, and `svn:executable` when changed.
 7. Inspect content for generated/local files, conflict markers `<<<<<<<`, `=======`, `>>>>>>>`, likely secrets, accidental deletion, unusually large or formatting-only churn, and missing tests. Mask secret values.
-8. When preparation was requested, perform only the safe add/delete actions above, then rerun status and relevant diffs.
-9. Infer intent only from verified paths and diffs. Do not invent issue IDs, requirements, or test results. Draft a concise Korean message: use 1-2 bullets for small changes and group broader work by intent, normally within 7 bullets.
-10. Produce the six-section Korean review. For an empty category write `- 없음`; when no meaningful risk exists write `특별한 위험 요소는 보이지 않습니다.`
-11. In CLI mode, show the final included and excluded paths, prepared add/delete paths, message, and remaining risks. Ask the one final question.
-12. After approval, rerun target-scoped `svn status --xml`, `svn diff --summarize`, `svn diff`, and property diff. If the approved scope or meaningful content changed, stop and show the new review; otherwise commit and verify the exact revision when possible.
+8. Apply the selected execution mode and complete eligible preparation before reporting. Verify resulting status and diffs; retain only unresolved risks. Do not let an independent code finding turn every safe add into a question.
+9. Use only observed test/build evidence. Reuse prior results only when the relevant reviewed content has not changed, naming the prior result and that it was not rerun. Otherwise report unverified coverage; do not run builds/tests that would modify the working copy under this skill.
+10. Infer intent only from verified paths and diffs. Do not invent issue IDs, requirements, or test results. Group the Korean summary and message by intent without a fixed bullet count: small changes usually need 1-2 bullets, broader work normally fits within 7. Omit per-line narration and repeated warnings.
+11. Produce the six-section Korean review once, including preparation outcomes and unresolved risks. For an empty category write `- 없음`; when no meaningful risk exists write `특별한 위험 요소는 보이지 않습니다.`
+12. In CLI mode, follow the confirmation rules above. After final approval, recheck status and relevant content/property diffs, commit the approved scope, clean up, and verify the exact revision when possible. Report only the changed review or execution outcome on follow-up, rather than repeating the entire unchanged review.
 
 ## Risk checklist
 
@@ -110,7 +114,7 @@ Report only applicable risks:
 
 ## Output format
 
-Always write the result in Korean using this structure.
+Write the initial review in Korean using the six-section structure below. On follow-up, output only changed sections or section 7 for a commit attempt; do not repeat the unchanged review.
 
 ````markdown
 # SVN 커밋 전 검토 결과
@@ -128,7 +132,7 @@ Always write the result in Korean using this structure.
 - `path`: 변경 내용
 
 ### Added / Unversioned
-- `path`: add 상태 또는 add 예정
+- `path`: add 완료 (A 확인) / 이미 Added / 미추적 유지 및 이유
 
 ### Deleted / Missing
 - `path`: 삭제 의도 또는 delete 예정
@@ -144,7 +148,7 @@ Always write the result in Korean using this structure.
 
 ## 3. 커밋 전 확인 필요 항목
 
-- 위험 유형: 경로와 필요한 조치
+- 미해결 위험 유형: 경로와 필요한 조치 (완료된 add는 반복하지 않음)
 
 문제가 없으면:
 특별한 위험 요소는 보이지 않습니다.
@@ -165,7 +169,7 @@ Always write the result in Korean using this structure.
 검토:
 - svn status 확인
 - svn diff 확인
-- 테스트: 실행함 / 미실행 / 확인 필요
+- 테스트: 실행함 / 이전 실행 결과와 적용 범위 (이번 검토 미실행) / 미실행 / 확인 필요
 
 주의:
 - 없음 / ...
@@ -175,7 +179,7 @@ Always write the result in Korean using this structure.
 
 - [ ] Check for Modifications에서 포함/제외 범위 확인
 - [ ] 파일 및 property Diff 확인
-- [ ] 필요한 신규 파일과 삭제 예약만 확인
+- [ ] 준비된 신규 파일과 삭제 예약 확인 (미해결 항목이 있으면 별도 처리)
 - [ ] 충돌, missing, remote, external, switched, lock 상태 확인
 - [ ] 로컬/생성/민감 파일 제외
 - [ ] 테스트 결과와 추천 커밋 메시지 확인
@@ -186,6 +190,7 @@ Always write the result in Korean using this structure.
 - 삭제 예약: 없음 / ...
 - 제외: 없음 / ...
 - 실행 방식: TortoiseSVN 수동 / Codex CLI
+- 검토 모드: 읽기 전용 / 필수 파일 준비
 ````
 
 In CLI mode, append this section after the commit attempt:
@@ -204,15 +209,16 @@ In CLI mode, append this section after the commit attempt:
 
 Judgment:
 
+- Judge the intended commit scope after preparation. Files verified as excluded, including excluded local secret candidates, do not by themselves block that commit; ensure directory targets cannot include them.
 - `가능`: 필수 파일이 추적되었거나 자동 준비되었고, 차단 요인이 없으며 범위와 검증이 충분하다.
 - `조건부 가능`: 테스트, 원격 확인, property 검토, 모호한 파일, 또는 의도 확인이 남아 있다.
-- `보류 권장`: 충돌, 민감정보 가능성, obstruction, broken lock, 의심스러운 삭제, 위험한 범위, out-of-date 대상, 또는 변경 의도 불명이 있다.
+- `보류 권장`: 커밋 대상에 충돌, 민감정보 가능성, obstruction, broken lock, 의심스러운 삭제, 위험한 범위, out-of-date 상태, 필수 빌드 파일 누락, 근거 있는 중대한 로직 위험, 또는 변경 의도 불명이 있다.
 
 ## TortoiseSVN final checklist
 
-Use section 6 as the single operational checklist. Keep detailed file explanations in section 2 and do not repeat low-value warnings.
+Use section 6 as the single operational checklist and keep only applicable items. Keep file explanations and verified add results in section 2; do not tell the user to add a file already confirmed as `A`. In CLI mode this is a scope summary, not a requirement to open TortoiseSVN or commit manually.
 
 - In manual mode, tell the user to paste the Korean message into TortoiseSVN and stop.
-- In CLI mode, ask only the one final question after showing the final scope and message.
+- In CLI mode, use the confirmation rules above without a second approval or a manual-commit handoff.
 - After a CLI commit, verify only the revision parsed from that command output; never use `--limit 1` as proof.
 - Report temporary message-file cleanup and any encoding-verification gap without exposing its machine-specific path.
