@@ -1,8 +1,33 @@
-# svn-precommit-review 사용 가이드
+# precommit-review-skills 사용 가이드
+
+[precommit-review-skills](https://github.com/cku3987/precommit-review-skills)는 Git과 SVN 커밋 전 검토를 위한 독립적인 Codex Agent Skill 모음입니다. 릴리스는 저장소 단위로 공유하며, 각 스킬은 별도로 설치하고 호출합니다. 기존 `svn-precommit-review` 이름과 `SKILL.md`는 그대로 유지하므로 기존 설치 이름을 바꾸지 마세요.
+
+- [SVN 스킬](../svn-precommit-review/SKILL.md)
+- [Git 스킬](../git-precommit-review/SKILL.md)
+- [Git 상세 가이드](git-precommit-review-guide.md)
+
+## Git
+
+`git-precommit-review`는 검토 보고서와 커밋 메시지를 한국어로 작성합니다.
+
+- 기본 호출은 검토와 함께 필요성이 확인된 안전한 신규 파일을 자동으로 스테이징합니다. 무시된 파일, 생성물, 비밀정보 포함 파일은 제외합니다.
+- 읽기 전용을 명시하면 어떤 쓰기도 하지 않습니다.
+- 커밋 요청 시 검토된 추적 파일 변경을 준비하되, 기존 부분 스테이징을 보존합니다. 범위 지정 커밋에는 관련 없는 기존 스테이징 변경을 포함하지 않습니다.
+- 실제 커밋은 범위와 메시지에 대한 최종 확인 한 번을 거칩니다. `push`는 별도 요청이 있을 때만 수행합니다.
+
+기본 호출, 커밋 요청(`커밋해줘`), 명시적 읽기 전용 예시:
+
+```text
+$git-precommit-review
+$git-precommit-review 변경사항을 검토하고 커밋해줘.
+$git-precommit-review 현재 Git 변경사항을 읽기 전용으로 검토만 해줘. 어떤 쓰기도 하지 마.
+```
+
+## SVN
 
 `svn-precommit-review`는 SVN/TortoiseSVN 커밋 직전에 변경사항을 검토하고 한국어 커밋 메시지를 작성하는 Codex Agent Skill입니다. 기본 호출은 검토와 안전 기준을 충족한 필수 신규 파일의 자동 `svn add`를 수행합니다. 실제 커밋은 사용자 요청과 범위·메시지에 대한 최종 확인 한 번을 거쳐 승인 범위만 실행합니다.
 
-## 설치
+### 설치
 
 사용자 전역:
 
@@ -18,7 +43,7 @@
 
 이 저장소의 `svn-precommit-review/SKILL.md`를 원하는 위치에 복사하세요.
 
-## 기본 사용
+### 기본 사용
 
 기본 검토 및 필수 파일 준비 (`검토해줘` 같은 일반 요청도 동일):
 
@@ -56,7 +81,7 @@ $svn-precommit-review 방금 검토한 삭제 후보도 포함해서 커밋 준�
 네, 진행해
 ```
 
-## 동작 범위
+### 동작 범위
 
 - `svn status --xml`, `svn status -u --xml`, `svn diff --summarize`, 내용 diff, property diff를 검토합니다.
 - 빌드 산출물, IDE/user 파일, 로그/임시 파일, 로컬 설정, 민감정보, 충돌 마커, 누락 파일, 원격 변경, property 변경을 점검합니다.
@@ -73,7 +98,7 @@ $svn-precommit-review 방금 검토한 삭제 후보도 포함해서 커밋 준�
 
 실행 중 안내, 검토, 커밋 메시지와 결과는 모두 한국어로 작성합니다. 요약은 변경 의도별로 묶고 고정된 항목 수나 장황한 설명을 강요하지 않습니다. 이전 테스트는 실제 근거가 있고 검토 대상 내용이 그대로일 때만 재사용하며, 이전 결과이고 이번에는 재실행하지 않았음을 명시합니다.
 
-## 한글 커밋 메시지
+### 한글 커밋 메시지
 
 CLI 커밋에는 작업 사본 밖의 고유한 임시 메시지 파일을 BOM 없는 UTF-8·LF로 작성하고 `--file`과 `--encoding UTF-8`을 사용합니다.
 
@@ -83,7 +108,7 @@ svn commit --file <message-file> --encoding UTF-8 <approved-paths>
 
 매 커밋 시도 뒤 임시 파일을 지우고 부재를 확인합니다. 가능하면 커밋 명령 출력에서 확인한 실제 리비전의 XML 로그 메시지를 원본과 정확히 비교합니다. 저장소에 한글 메시지가 깨져 저장되면 커밋 재시도나 revision property 수정은 하지 않고 검증 실패로 보고합니다.
 
-## 요구 사항
+### 요구 사항
 
 PowerShell 또는 사용할 셸에서 `svn` 명령이 실행되어야 합니다.
 

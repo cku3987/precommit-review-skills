@@ -1,8 +1,33 @@
-# svn-precommit-review 使用指南
+# precommit-review-skills 使用指南
+
+[precommit-review-skills](https://github.com/cku3987/precommit-review-skills) 是用於 Git 與 SVN 提交前審查的獨立 Codex Agent Skill 集合。版本發佈以儲存庫為單位統一進行，各技能獨立安裝與呼叫。既有 `svn-precommit-review` 名稱及其 `SKILL.md` 維持不變，請勿重新命名已安裝的 SVN 技能。
+
+- [SVN 技能](../svn-precommit-review/SKILL.md)
+- [Git 技能](../git-precommit-review/SKILL.md)
+- [Git 詳細指南](git-precommit-review-guide.md)
+
+## Git
+
+`git-precommit-review` 使用韓語撰寫審查報告與提交訊息。
+
+- 預設呼叫會審查變更，並自動暫存已確認必要且安全的新檔案。忽略檔案、產生檔及含有秘密資訊的檔案均被排除。
+- 明確要求唯讀時，不執行任何寫入。
+- 要求提交時，會準備已審查的已追蹤檔案變更，同時保留既有的部分暫存狀態。限定範圍的提交不會包含無關的已暫存變更。
+- 實際提交需對範圍與訊息進行一次最終確認。`push` 僅在另行要求時執行。
+
+預設呼叫、韓語提交要求（`커밋해줘`）及明確唯讀的範例：
+
+```text
+$git-precommit-review
+$git-precommit-review 변경사항을 검토하고 커밋해줘.
+$git-precommit-review 僅以唯讀方式檢查目前 Git 變更，不執行任何寫入。
+```
+
+## SVN
 
 `svn-precommit-review` 是在 SVN/TortoiseSVN 提交前檢查工作副本並產生韓語提交訊息的 Codex Agent Skill。預設呼叫會執行審查，並自動對符合安全條件的必要新檔案執行 `svn add`。實際提交需要使用者提出提交要求，並對範圍與訊息進行一次最終確認，只提交已核准的範圍。
 
-## 安裝
+### 安裝
 
 ```text
 %USERPROFILE%\.codex\skills\svn-precommit-review\SKILL.md
@@ -16,7 +41,7 @@
 
 請將此儲存庫的 `svn-precommit-review/SKILL.md` 複製到目標位置。
 
-## 使用方式
+### 使用方式
 
 預設審查並準備必要檔案（一般的「檢查一下」或 `검토해줘` 也相同）:
 
@@ -42,7 +67,7 @@ $svn-precommit-review 檢查 <SVN_WORKING_COPY> 的變更並提交。
 네, 진행해
 ```
 
-## 行為
+### 行為
 
 - 檢查 `svn status --xml`、遠端狀態、內容 diff 與 property diff。
 - 檢查產生檔、IDE/使用者檔案、日誌、本機設定、敏感資訊、衝突、遺失檔案與測試不足。
@@ -59,7 +84,7 @@ $svn-precommit-review 檢查 <SVN_WORKING_COPY> 的變更並提交。
 
 執行期間的說明、審查、提交訊息與結果一律使用韓語。摘要依變更意圖分組，不限定項目數，也不要求冗長說明。只有存在真實證據且審查內容未變時，才可沿用先前測試，並明確標註為先前結果、本次未重新執行。
 
-## 韓語提交訊息
+### 韓語提交訊息
 
 CLI 提交在工作副本外建立唯一的暫存訊息檔，使用無 BOM 的 UTF-8 與 LF 換行，並透過 `--file` 和 `--encoding UTF-8` 提交:
 

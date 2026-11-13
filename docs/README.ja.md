@@ -1,8 +1,33 @@
-# svn-precommit-review ガイド
+# precommit-review-skills ガイド
+
+[precommit-review-skills](https://github.com/cku3987/precommit-review-skills) は、Git と SVN のコミット前レビュー用の独立した Codex Agent Skill 集です。リリースはリポジトリ単位で共通ですが、各スキルは個別にインストールして呼び出します。既存の `svn-precommit-review` の名前と `SKILL.md` は維持されるため、既存のインストール名を変更しないでください。
+
+- [SVN スキル](../svn-precommit-review/SKILL.md)
+- [Git スキル](../git-precommit-review/SKILL.md)
+- [Git 詳細ガイド](git-precommit-review-guide.md)
+
+## Git
+
+`git-precommit-review` はレビュー報告とコミットメッセージを韓国語で作成します。
+
+- 標準の呼び出しではレビューとともに、必要性が確認された安全な新規ファイルを自動でステージングします。無視対象、生成物、秘密情報を含むファイルは除外します。
+- 読み取り専用を明示すると、一切書き込みません。
+- コミット依頼時はレビュー済みの追跡ファイルの変更を準備しますが、既存の部分ステージングは保持します。範囲指定のコミットには無関係なステージ済み変更を含めません。
+- 実際のコミットには範囲とメッセージへの一度の最終確認が必要です。`push` は別途依頼された場合のみ実行します。
+
+標準の呼び出し、韓国語のコミット依頼（`커밋해줘`）、明示的な読み取り専用の例:
+
+```text
+$git-precommit-review
+$git-precommit-review 변경사항을 검토하고 커밋해줘.
+$git-precommit-review 現在の Git 変更を読み取り専用で確認して。一切書き込まないで。
+```
+
+## SVN
 
 `svn-precommit-review` は、SVN/TortoiseSVN のコミット直前に変更を確認し、韓国語のコミットメッセージを作成する Codex Agent Skill です。標準の呼び出しではレビューと、安全基準を満たす必須の新規ファイルの自動 `svn add` を行います。実際のコミットにはユーザーの依頼と範囲・メッセージへの一度の最終承認が必要で、承認範囲だけをコミットします。
 
-## インストール
+### インストール
 
 ```text
 %USERPROFILE%\.codex\skills\svn-precommit-review\SKILL.md
@@ -16,7 +41,7 @@
 
 このリポジトリの `svn-precommit-review/SKILL.md` をコピーしてください。
 
-## 使い方
+### 使い方
 
 標準のレビューと必須ファイルの準備（単なる「確認して」や `검토해줘` も同じ）:
 
@@ -42,7 +67,7 @@ $svn-precommit-review <SVN_WORKING_COPY> の変更を確認してコミットし
 네, 진행해
 ```
 
-## 動作
+### 動作
 
 - `svn status --xml`、リモート状態、内容 diff、property diff を確認します。
 - 生成物、IDE/ユーザー固有ファイル、ログ、ローカル設定、秘密情報、競合、欠落ファイル、テスト不足を確認します。
@@ -59,7 +84,7 @@ $svn-precommit-review <SVN_WORKING_COPY> の変更を確認してコミットし
 
 実行中の案内、レビュー、コミットメッセージ、結果はすべて韓国語で記述します。要約は変更意図ごとにまとめ、固定の箇条書き数や冗長な説明を求めません。以前のテストは実際の証拠があり、レビュー対象の内容が変わっていない場合だけ再利用し、過去の結果で今回は再実行していないと明記します。
 
-## 韓国語コミットメッセージ
+### 韓国語コミットメッセージ
 
 CLI コミットでは作業コピーの外に一意の一時メッセージファイルを BOM なし UTF-8・LF で作成し、`--file` と `--encoding UTF-8` を使用します。
 

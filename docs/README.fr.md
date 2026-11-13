@@ -1,8 +1,33 @@
-# Guide svn-precommit-review
+# Guide precommit-review-skills
+
+[precommit-review-skills](https://github.com/cku3987/precommit-review-skills) rassemble des compétences Codex Agent indépendantes pour la revue avant commit dans Git et SVN. Les versions sont publiées en commun au niveau du dépôt, mais chaque compétence s'installe et s'invoque séparément. Le nom `svn-precommit-review` et son `SKILL.md` restent inchangés ; ne renommez pas la compétence SVN déjà installée.
+
+- [Compétence SVN](../svn-precommit-review/SKILL.md)
+- [Compétence Git](../git-precommit-review/SKILL.md)
+- [Guide Git détaillé](git-precommit-review-guide.md)
+
+## Git
+
+`git-precommit-review` rédige les rapports de revue et les messages de commit en coréen.
+
+- Par défaut, la compétence examine les changements et indexe automatiquement les nouveaux fichiers sûrs dont la nécessité est confirmée. Les fichiers ignorés, générés ou contenant des secrets sont exclus.
+- Une demande explicite de lecture seule interdit toute écriture.
+- Lors d'une demande de commit, elle prépare les changements examinés des fichiers suivis tout en préservant l'indexation partielle existante. Un commit au périmètre délimité exclut les changements sans rapport déjà indexés.
+- Le commit nécessite une seule confirmation finale du périmètre et du message. `push` n'est exécuté que sur demande distincte.
+
+Exemples d'invocation par défaut, de demande de commit en coréen (`커밋해줘`) et de lecture seule explicite :
+
+```text
+$git-precommit-review
+$git-precommit-review 변경사항을 검토하고 커밋해줘.
+$git-precommit-review Vérifie les changements Git actuels en lecture seule. N'effectue aucune écriture.
+```
+
+## SVN
 
 `svn-precommit-review` est une compétence Codex Agent qui vérifie une copie de travail SVN/TortoiseSVN avant le commit et rédige un message de commit en coréen. Par défaut, elle effectue la revue et exécute automatiquement `svn add` pour les nouveaux fichiers nécessaires qui respectent les critères de sécurité. Le commit nécessite une demande de l'utilisateur et une seule confirmation finale du périmètre et du message ; seul le périmètre approuvé est committé.
 
-## Installation
+### Installation
 
 ```text
 %USERPROFILE%\.codex\skills\svn-precommit-review\SKILL.md
@@ -16,7 +41,7 @@ ou :
 
 Copiez `svn-precommit-review/SKILL.md` de ce dépôt vers l'emplacement choisi.
 
-## Utilisation
+### Utilisation
 
 Revue et préparation par défaut des fichiers nécessaires (une demande générale comme « vérifie » ou `검토해줘` fait de même) :
 
@@ -42,7 +67,7 @@ Si vous avez demandé un commit, vérifiez les chemins inclus et exclus, les add
 네, 진행해
 ```
 
-## Comportement
+### Comportement
 
 - Vérifie `svn status --xml`, l'état distant, les diffs de contenu et de propriétés.
 - Vérifie les fichiers générés, les fichiers IDE/utilisateur, les journaux, la configuration locale, les données sensibles, les conflits, les fichiers manquants et les lacunes de tests.
@@ -59,7 +84,7 @@ Si vous avez demandé un commit, vérifiez les chemins inclus et exclus, les add
 
 Les indications pendant l'exécution, la revue, le message de commit et les résultats sont toujours rédigés en coréen. Les résumés sont regroupés par intention, sans nombre fixe de points ni détails excessifs. Les tests antérieurs ne sont réutilisés qu'avec des preuves réelles applicables au contenu examiné resté inchangé, et sont signalés comme résultats antérieurs, non réexécutés.
 
-## Messages de commit en coréen
+### Messages de commit en coréen
 
 Pour les commits CLI, crée hors de la copie de travail un fichier temporaire unique en UTF-8 sans BOM, avec des fins de ligne LF, et utilise `--file` et `--encoding UTF-8` :
 
